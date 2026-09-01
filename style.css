@@ -10,6 +10,7 @@
    7.  Jadwal mingguan
    8.  Aktivitas & bimbingan
    9.  Pencarian
+   9b. Mathfest — timeline kepanitiaan
    10. Footer
    11. Responsive
    12. Reduced motion & print
@@ -1160,6 +1161,174 @@ main:focus { outline: none; }
   color: var(--text);
   border-radius: 3px;
   padding: 0 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   9b. MATHFEST — timeline kepanitiaan
+   ------------------------------------------------------------------------- */
+.mf-block { margin-top: 20px; }
+
+/* Ringkasan kepanitiaan di dashboard */
+.mf-dash-list { margin-top: 4px; }
+.mf-dash-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.mf-dash-link:hover { text-decoration: underline; }
+.mf-dash-link .chev { width: 15px; height: 15px; }
+
+/* Peringatan bentrok */
+.mf-clear {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--success-soft);
+  color: var(--success);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+.mf-clear .icon { flex: none; margin-top: 1px; }
+
+.mf-alert-list { display: flex; flex-direction: column; gap: 10px; }
+
+.mf-alert-row {
+  position: relative;
+  overflow: hidden;
+  padding: 15px 18px;
+}
+.mf-alert-row::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--warning);
+}
+.mf-alert-row[data-level="danger"]::before { background: var(--danger); }
+
+.mf-alert-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.mf-alert-title { font-size: 0.875rem; font-weight: 600; }
+.mf-alert-date {
+  flex: none;
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mf-reasons { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.mf-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--warning);
+}
+.mf-reason[data-level="danger"] { color: var(--danger); }
+.mf-reason .icon { flex: none; width: 15px; height: 15px; margin-top: 2px; }
+.mf-reason-detail {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.mf-alert-note {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Daftar timeline */
+.mf-list { display: flex; flex-direction: column; gap: 8px; }
+
+.mf-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 15px 18px;
+}
+.mf-item[data-state="done"] { opacity: 0.55; }
+.mf-item[data-mine="true"] { border-color: var(--border-strong); }
+
+.mf-item-main { min-width: 0; }
+.mf-item-title { font-size: 0.9375rem; font-weight: 600; line-height: 1.35; }
+.mf-item-sub {
+  margin-top: 2px;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.mf-item-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 10px;
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+}
+.mf-item-facts > span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.mf-item-facts .icon { width: 14px; height: 14px; flex: none; }
+
+.mf-item-needs {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.mf-item-needs .icon { flex: none; width: 14px; height: 14px; margin-top: 2px; color: var(--text-subtle); }
+
+.mf-item-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--warning);
+}
+.mf-item-warn[data-level="danger"] { color: var(--danger); }
+.mf-item-warn .icon { flex: none; width: 14px; height: 14px; margin-top: 2px; }
+
+.mf-item-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex: none;
+}
+
+@media (max-width: 640px) {
+  .mf-item { flex-direction: column; gap: 12px; }
+  .mf-item-side { flex-direction: row; align-items: center; }
+  .mf-alert-date { white-space: normal; }
 }
 
 /* ---------------------------------------------------------------------------

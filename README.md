@@ -86,6 +86,7 @@ Total SKS kuliah, jumlah kelas per hari, status, dan countdown ikut menyesuaikan
     day: 6, start: '10:20', end: '12:00',
     room: 'Lab MIK',
     lecturer: 'Fahrudin Muhtarulloh, S.Si., M.Sc.',
+    formality: true,             // slot KRS yang tidak benar-benar berjalan
   },
   progress: null,
   deadline: null,
@@ -102,6 +103,12 @@ seminar otomatis muncul di semua tampilan.
 SKS aktivitas tetap dihitung sebagai **beban tambahan**, bukan perkuliahan
 reguler — jadi pemisahan 15 / 7 / 22 SKS tidak berubah walau aktivitasnya
 terjadwal.
+
+`formality: true` di dalam `session` menandai slot yang hanya muncul sebagai
+formalitas KRS di SALAM padahal tidak ada kelas atau bimbingan yang benar-benar
+berjalan. Slot seperti ini tetap tampil di jadwal mingguan (supaya cocok dengan
+SALAM), tetapi **tidak pernah dihitung sebagai bentrok** oleh deteksi bentrok
+di tampilan Mathfest.
 
 Isi `null` pada field yang belum diketahui — aplikasi menampilkannya sebagai
 **Belum ditentukan**, bukan mengarang isi.
@@ -152,6 +159,58 @@ agenda yang sedang berjalan ditandai "Berlangsung".
 ```
 
 Untuk agenda satu hari, isi `start` dan `end` dengan tanggal yang sama.
+
+Tandai `critical: true` pada agenda yang tidak boleh ditabrak kegiatan lain
+(UTS dan UAS). Hanya agenda bertanda ini yang dipakai deteksi bentrok Mathfest.
+
+### Kepanitiaan Mathfest — `mathfestConfig`, `mathfestPhases`, `mathfestTimeline`
+
+Tab **Mathfest** menampilkan seluruh timeline kepanitiaan, difilter secara
+default ke agenda divisi sendiri.
+
+```js
+const mathfestConfig = {
+  name: 'Mathfest 2026',
+  organization: 'HIMATIKA',
+  role: 'Divisi Kompetisi',
+  division: 'kompetisi',
+};
+```
+
+Tiap agenda:
+
+```js
+{
+  id: 'okt-tm-komet',
+  phase: 'oktober',              // id dari mathfestPhases
+  agenda: 'Technical Meeting',
+  sub: 'Komet',                  // boleh null
+  start: '2026-10-31',
+  end: '2026-10-31',
+  when: null,                    // dipakai bila start/end null, mis. 'Setiap H-2 minggu'
+  place: 'Lab/Kelas',
+  needs: null,                   // kolom "What's We Need"
+  pj: 'Panitia Kegiatan, Kompetisi',
+  relevance: 'utama',
+}
+```
+
+`relevance` menentukan apa yang tampil pada filter **Lingkup**:
+
+| Nilai | Arti |
+| --- | --- |
+| `'utama'` | penanggung jawab menyebut divisi sendiri secara eksplisit |
+| `'terkait'` | pekerjaan seputar lomba, dikoordinasi divisi lain |
+| `null` | agenda divisi lain — hanya muncul pada filter "Semua Divisi" |
+
+**Deteksi bentrok** berjalan otomatis. Sebuah agenda ditandai bila:
+
+- rentang tanggalnya beririsan dengan agenda akademik bertanda `critical`
+  (bertabrakan — merah), atau agenda `critical` menyusul dalam 3 hari
+  (berdekatan — kuning);
+- agenda satu hari jatuh pada hari yang ada jadwal kuliahnya. Sesi bertanda
+  `formality: true` dilewati, sehingga slot Sabtu Studi Literatur tidak pernah
+  memunculkan peringatan palsu.
 
 ## Pintasan
 

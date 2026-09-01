@@ -19,6 +19,9 @@
   var GUIDANCE = [];
   var CATEGORIES = {};
   var CALENDAR = [];
+  var MATHFEST = { name: null, organization: null, role: null, division: null };
+  var MF_PHASES = [];
+  var MF_ITEMS = [];
 
   try { PROFILE = Object.assign(PROFILE, profileData); } catch (e) {}
   try { CONFIG = Object.assign(CONFIG, semesterConfig); } catch (e) {}
@@ -27,6 +30,9 @@
   try { if (Array.isArray(guidanceData)) GUIDANCE = guidanceData.slice(); } catch (e) {}
   try { CATEGORIES = Object.assign({}, categoryLabels); } catch (e) {}
   try { if (Array.isArray(academicCalendar)) CALENDAR = academicCalendar.slice(); } catch (e) {}
+  try { MATHFEST = Object.assign(MATHFEST, mathfestConfig); } catch (e) {}
+  try { if (Array.isArray(mathfestPhases)) MF_PHASES = mathfestPhases.slice(); } catch (e) {}
+  try { if (Array.isArray(mathfestTimeline)) MF_ITEMS = mathfestTimeline.slice(); } catch (e) {}
 
   CLASSES.sort(function (a, b) {
     return a.day - b.day || toMinutes(a.start) - toMinutes(b.start);
@@ -44,7 +50,8 @@
       id: c.id, name: c.name, code: c.code || null, day: c.day,
       start: c.start, end: c.end, sks: c.sks, room: c.room,
       lecturer: c.lecturer, kind: c.kind, category: c.category,
-      classGroup: c.classGroup || null, type: 'perkuliahan'
+      classGroup: c.classGroup || null, type: 'perkuliahan',
+      formality: !!c.formality
     };
   });
 
@@ -54,12 +61,24 @@
       id: 'sesi-' + a.id, name: a.name, code: a.code || null, day: a.session.day,
       start: a.session.start, end: a.session.end, sks: a.sks, room: a.session.room,
       lecturer: a.session.lecturer || a.supervisor, kind: CATEGORIES[a.category] || 'Aktivitas Akademik',
-      category: a.category, classGroup: a.classGroup || null, type: 'aktivitas'
+      category: a.category, classGroup: a.classGroup || null, type: 'aktivitas',
+      formality: !!a.session.formality
     });
   });
 
   SESSIONS.sort(function (a, b) {
     return a.day - b.day || toMinutes(a.start) - toMinutes(b.start);
+  });
+
+  /* Agenda kepanitiaan diurutkan berdasarkan tanggal mulai; agenda tanpa
+     tanggal ditempatkan paling akhir. */
+  MF_ITEMS.sort(function (a, b) {
+    var da = parseISODate(a.start);
+    var db = parseISODate(b.start);
+    if (!da && !db) return 0;
+    if (!da) return 1;
+    if (!db) return -1;
+    return da - db || (parseISODate(a.end) || da) - (parseISODate(b.end) || db);
   });
 
   /* ==========================================================================
@@ -201,6 +220,7 @@
     inbox: '<path d="M3.8 13.2h4l1.5 2.3h5.4l1.5-2.3h4"/><path d="M6.6 4.4h10.8l3 8.8v4.4a2 2 0 0 1-2 2H5.6a2 2 0 0 1-2-2v-4.4l3-8.8Z"/>',
     info: '<circle cx="12" cy="12" r="8.6"/><path d="M12 11.2v5.2"/><circle cx="12" cy="7.9" r=".95" fill="currentColor" stroke="none"/>',
     check: '<path d="m5.2 12.6 4.4 4.4L18.8 7.6"/>',
+    alert: '<path d="M10.7 4.2 2.8 17.6a1.5 1.5 0 0 0 1.3 2.3h15.8a1.5 1.5 0 0 0 1.3-2.3L13.3 4.2a1.5 1.5 0 0 0-2.6 0Z"/><path d="M12 9.4v4"/><circle cx="12" cy="16.6" r=".95" fill="currentColor" stroke="none"/>',
     sparkles: '<path d="M12 3.6 13.7 9l5.4 1.7-5.4 1.7L12 17.8l-1.7-5.4L4.9 10.7 10.3 9 12 3.6Z"/><path d="M18.6 16.4l.7 2.2 2.2.7-2.2.7-.7 2.2-.7-2.2-2.2-.7 2.2-.7.7-2.2Z"/>'
   };
 
@@ -366,6 +386,20 @@
         category: 'bimbingan',
         meta: (g.topic || EMPTY) + ' · ' + (g.supervisor || EMPTY) + ' · ' + g.status,
         terms: [g.type, g.topic, g.supervisor, g.status, 'bimbingan', 'pembimbing']
+      });
+    });
+
+    MF_ITEMS.forEach(function (m) {
+      items.push({
+        kind: 'mathfest', ref: m, icon: 'sparkles',
+        title: m.agenda + (m.sub ? ' · ' + m.sub : ''),
+        categoryLabel: MATHFEST.name || 'Kepanitiaan',
+        category: 'mathfest',
+        meta: mfDateLabel(m) + (m.place ? ' · ' + m.place : '') +
+          (m.pj ? ' · ' + m.pj : '') + (m.needs ? ' · ' + m.needs : ''),
+        terms: [m.agenda, m.sub, m.pj, m.needs, m.place, m.when,
+          MATHFEST.name, MATHFEST.organization, 'mathfest', 'kepanitiaan', 'panitia', 'timeline',
+          mfIsMine(m) ? MATHFEST.role : null]
       });
     });
 
@@ -588,6 +622,7 @@
       quickItem('jadwal', 'calendar', 'Jadwal Mingguan') +
       quickItem('aktivitas', 'book', 'Aktivitas Akademik') +
       quickItem('bimbingan', 'mentor', 'Bimbingan') +
+      (MF_ITEMS.length ? quickItem('mathfest', 'sparkles', MATHFEST.name || 'Kepanitiaan') : '') +
       '</div></section>';
 
     /* Progress semester */
@@ -596,8 +631,47 @@
       semesterProgressBlock(now) +
       '</section>';
 
+    html += mathfestDashCard(now);
+
     html += '</div></div>';
     return html;
+  }
+
+  /* Ringkasan kepanitiaan di dashboard — hanya agenda divisi sendiri yang
+     sedang berjalan atau paling dekat. Kartu ini hilang sendiri kalau
+     mathfestTimeline kosong. */
+  function mathfestDashCard(now) {
+    if (!MF_ITEMS.length) return '';
+
+    var active = MF_ITEMS.filter(function (it) {
+      if (!mfIsMine(it)) return false;
+      var st = mfStatus(it, now);
+      return st === 'live' || st === 'upcoming';
+    }).slice(0, 3);
+
+    var html = '<section class="card card-pad" aria-labelledby="mf-dash-heading">' +
+      '<div class="section-head"><h2 id="mf-dash-heading">' +
+      esc(MATHFEST.name || 'Kepanitiaan') + '</h2>' +
+      '<span class="count">' + esc(MATHFEST.role || '') + '</span></div>';
+
+    if (!active.length) {
+      html += '<p class="semester-note">' + icon('info') +
+        '<span>Tidak ada agenda divisi yang sedang berjalan atau akan datang.</span></p>';
+    } else {
+      html += '<ul class="mf-dash-list">' + active.map(function (it) {
+        var tag = mfDayTag(it, now);
+        return '<li class="agenda-row" data-state="' + mfStatus(it, now) + '">' +
+          '<span class="agenda-name">' + esc(it.agenda) + '</span>' +
+          '<span class="agenda-date">' + esc(mfDateLabel(it)) + '</span>' +
+          (tag ? '<span class="agenda-tag">' + tag + '</span>' : '') +
+          '</li>';
+      }).join('') + '</ul>';
+
+      html += '<button type="button" class="mf-dash-link" data-quick="mathfest">' +
+        'Lihat seluruh timeline' + icon('chevron', 'chev') + '</button>';
+    }
+
+    return html + '</section>';
   }
 
   function loadFigure(n, label, isTotal) {
@@ -664,7 +738,7 @@
      8. VIEW: JADWAL
      ======================================================================== */
 
-  var filters = { day: 'all', category: 'all' };
+  var filters = { day: 'all', category: 'all', mfScope: 'saya', mfStatus: 'all' };
 
   function renderJadwal(now) {
     var today = now.getDay();
@@ -882,7 +956,341 @@
   }
 
   /* ==========================================================================
-     11. VIEW: PENCARIAN
+     11. VIEW: MATHFEST — timeline kepanitiaan
+     ======================================================================== */
+
+  var MF_STATUS_LABEL = { live: 'Berjalan', upcoming: 'Akan Datang', done: 'Selesai', undated: 'Tanpa Tanggal' };
+  var MF_STATUS_TONE = { live: 'success', upcoming: 'neutral', done: 'muted', undated: 'muted' };
+
+  /** Agenda yang penanggung jawabnya menyebut divisi sendiri, atau pekerjaan
+      seputar lomba yang dikoordinasi divisi lain. */
+  function mfIsMine(item) {
+    return item.relevance === 'utama' || item.relevance === 'terkait';
+  }
+
+  function mfStatus(item, now) {
+    if (!item.start) return 'undated';
+    return calendarStatus(item, now);
+  }
+
+  function mfDateLabel(item) {
+    if (item.start) return dateRangeLabel(item.start, item.end);
+    return item.when || EMPTY;
+  }
+
+  function rangesOverlap(aStart, aEnd, bStart, bEnd) {
+    return aStart <= bEnd && bStart <= aEnd;
+  }
+
+  /* --------------------------------------------------------------------------
+     Bentrok agenda kepanitiaan dengan kehidupan akademik.
+     Dua sumber: agenda akademik bertanda `critical` (UTS/UAS) dan jadwal kuliah
+     mingguan. Sesi ber-flag `formality` — slot yang hanya muncul di KRS tetapi
+     tidak benar-benar berjalan — sengaja tidak pernah dihitung sebagai bentrok.
+     ------------------------------------------------------------------------ */
+  function mfConflicts(item) {
+    var out = [];
+    var s = parseISODate(item.start);
+    if (!s) return out;
+    var e = parseISODate(item.end) || s;
+
+    CALENDAR.forEach(function (ev) {
+      if (!ev.critical) return;
+      var es = parseISODate(ev.start);
+      if (!es) return;
+      var ee = parseISODate(ev.end) || es;
+
+      if (rangesOverlap(s, e, es, ee)) {
+        out.push({
+          level: 'danger',
+          label: 'Bertabrakan dengan ' + ev.name,
+          detail: dateRangeLabel(ev.start, ev.end)
+        });
+        return;
+      }
+      var gap = Math.round((es - e) / 86400000);
+      if (gap > 0 && gap <= 3) {
+        out.push({
+          level: 'warning',
+          label: ev.name + ' menyusul ' + gap + ' hari setelahnya',
+          detail: dateRangeLabel(ev.start, ev.end)
+        });
+      }
+    });
+
+    /* Bentrok jam kuliah hanya diperiksa untuk agenda satu hari — pada rentang
+       panjang, "ada kuliah di salah satu harinya" bukan informasi yang berguna. */
+    if (s.getTime() === e.getTime()) {
+      SESSIONS.forEach(function (c) {
+        if (c.formality || c.day !== s.getDay()) return;
+        out.push({
+          level: 'danger',
+          label: 'Bentrok jam kuliah ' + c.name,
+          detail: DAY_NAMES[c.day] + ' ' + clock(c.start) + '–' + clock(c.end) + ' · ' + c.room
+        });
+      });
+    }
+    return out;
+  }
+
+  function mfWorstLevel(conflicts) {
+    for (var i = 0; i < conflicts.length; i++) {
+      if (conflicts[i].level === 'danger') return 'danger';
+    }
+    return 'warning';
+  }
+
+  function mfFigure(n, label, isTotal) {
+    return '<div class="load-figure' + (isTotal ? ' is-total' : '') + '">' +
+      '<span class="value">' + n + '</span>' +
+      '<span class="label">' + esc(label) + '</span></div>';
+  }
+
+  function mfDayTag(item, now) {
+    var st = mfStatus(item, now);
+    if (st === 'live') return '<span class="badge badge-success badge-live">Berjalan</span>';
+    if (st === 'undated') return '<span class="badge badge-muted badge-plain">Tanpa tanggal</span>';
+    if (st === 'done') return '';
+    var d = daysUntil(item.start, now);
+    if (d === null) return '';
+    return '<span class="badge badge-neutral">' +
+      (d === 0 ? 'Hari ini' : d === 1 ? 'Besok' : d + ' hari lagi') + '</span>';
+  }
+
+  /* --------------------------------------------------------------------------
+     Kartu fokus: agenda divisi yang sedang berjalan, atau yang paling dekat
+     ------------------------------------------------------------------------ */
+  function mfFocusCard(now) {
+    var mine = MF_ITEMS.filter(mfIsMine);
+    var live = mine.filter(function (it) { return mfStatus(it, now) === 'live'; });
+    var upcoming = mine.filter(function (it) { return mfStatus(it, now) === 'upcoming'; });
+
+    if (!live.length && !upcoming.length) {
+      return '<section class="focus-card" data-state="empty" aria-labelledby="mf-focus-heading">' +
+        '<p class="section-label" id="mf-focus-heading">Agenda ' + esc(MATHFEST.role || 'Kepanitiaan') + '</p>' +
+        '<p class="focus-title" style="margin-top:10px">Tidak ada agenda aktif</p>' +
+        '<p class="focus-sub">Semua agenda yang menjadi tanggung jawabmu sudah lewat, ' +
+        'atau belum punya tanggal di timeline.</p>' +
+        '</section>';
+    }
+
+    var item = live.length ? live[0] : upcoming[0];
+    var state = live.length ? 'live' : 'upcoming';
+    var days = daysUntil(live.length ? (item.end || item.start) : item.start, now);
+    var dayText = days === null ? '—'
+      : days === 0 ? 'Hari ini'
+        : days === 1 ? 'Besok'
+          : days + ' hari';
+
+    var html = '<section class="focus-card" data-state="' + state + '" aria-labelledby="mf-focus-heading">' +
+      '<div class="focus-top">' +
+      '<p class="section-label" id="mf-focus-heading">' +
+      (live.length ? 'Sedang Berjalan' : 'Agenda Berikutnya') + '</p>' +
+      (live.length ? '<span class="badge badge-success badge-live">Berjalan</span>'
+        : '<span class="focus-day">' + esc(mfDateLabel(item)) + '</span>') +
+      '</div>' +
+      '<h2 class="focus-title">' + esc(item.agenda) + '</h2>' +
+      '<p class="focus-sub">' + esc(item.sub || mfDateLabel(item)) + '</p>' +
+      '<div class="countdown-block">' +
+      '<p class="countdown-label">' + (live.length ? 'Berakhir dalam' : 'Dimulai dalam') + '</p>' +
+      '<p class="countdown-value is-words">' + esc(dayText) + '</p>' +
+      '</div>' +
+      '<div class="focus-details"><div class="meta-grid">' +
+      metaItem('Jadwal', mfDateLabel(item)) +
+      metaItem('Penanggung Jawab', item.pj) +
+      metaItem('Kebutuhan', item.needs) +
+      metaItem('Tempat', item.place) +
+      '</div></div>';
+
+    var others = live.length + upcoming.length - 1;
+    if (others > 0) {
+      html += '<p class="focus-after">' + others + ' agenda divisimu lainnya masih menunggu.</p>';
+    }
+    return html + '</section>';
+  }
+
+  /* --------------------------------------------------------------------------
+     Peringatan: agenda kepanitiaan yang beririsan dengan agenda akademik
+     ------------------------------------------------------------------------ */
+  function mfAlertSection(now) {
+    var rows = [];
+    MF_ITEMS.forEach(function (it) {
+      if (mfStatus(it, now) === 'done') return;
+      var cf = mfConflicts(it);
+      if (cf.length) rows.push({ item: it, conflicts: cf });
+    });
+
+    if (!rows.length) {
+      return '<section aria-labelledby="mf-alert-heading" class="mf-block">' +
+        '<div class="section-head"><h2 id="mf-alert-heading">Peringatan Jadwal</h2>' +
+        '<span class="count">Aman</span></div>' +
+        '<p class="mf-clear">' + icon('check') +
+        '<span>Tidak ada agenda kepanitiaan mendatang yang bertabrakan dengan ' +
+        'jam kuliah maupun UTS/UAS.</span></p>' +
+        '</section>';
+    }
+
+    var html = '<section aria-labelledby="mf-alert-heading" class="mf-block">' +
+      '<div class="section-head"><h2 id="mf-alert-heading">Peringatan Jadwal</h2>' +
+      '<span class="count">' + rows.length + ' agenda</span></div>' +
+      '<p class="section-hint">Agenda kepanitiaan yang beririsan dengan UTS/UAS atau jam kuliah. ' +
+      'Slot Sabtu Studi Literatur tidak ikut dihitung karena hanya formalitas KRS.</p>' +
+      '<ul class="mf-alert-list">';
+
+    rows.forEach(function (r) {
+      html += '<li class="mf-alert-row card" data-level="' + mfWorstLevel(r.conflicts) + '">' +
+        '<div class="mf-alert-head">' +
+        '<span class="mf-alert-title">' + esc(r.item.agenda) +
+        (r.item.sub ? '<span class="dot-sep">·</span>' + esc(r.item.sub) : '') + '</span>' +
+        '<span class="mf-alert-date">' + esc(mfDateLabel(r.item)) + '</span>' +
+        '</div>' +
+        '<ul class="mf-reasons">' +
+        r.conflicts.map(function (c) {
+          return '<li class="mf-reason" data-level="' + c.level + '">' + icon('alert') +
+            '<span>' + esc(c.label) +
+            '<span class="mf-reason-detail">' + esc(c.detail) + '</span></span></li>';
+        }).join('') +
+        '</ul>' +
+        (mfIsMine(r.item)
+          ? '<p class="mf-alert-note">Agenda ini masuk lingkup ' + esc(MATHFEST.role || 'divisimu') + '.</p>'
+          : '') +
+        '</li>';
+    });
+
+    return html + '</ul></section>';
+  }
+
+  /* --------------------------------------------------------------------------
+     Baris timeline
+     ------------------------------------------------------------------------ */
+  function mfItemRow(item, now) {
+    var st = mfStatus(item, now);
+    var cf = mfConflicts(item);
+
+    var facts = '<span>' + icon('calendar') + esc(mfDateLabel(item)) + '</span>';
+    if (item.place) facts += '<span>' + icon('pin') + esc(item.place) + '</span>';
+    if (item.pj) facts += '<span>' + icon('user') + esc(item.pj) + '</span>';
+
+    var tags = '<span class="badge badge-' + MF_STATUS_TONE[st] +
+      (st === 'live' ? ' badge-live' : '') + '">' + MF_STATUS_LABEL[st] + '</span>';
+    if (item.relevance === 'utama') {
+      tags += '<span class="badge badge-neutral badge-plain">Divisiku</span>';
+    } else if (item.relevance === 'terkait') {
+      tags += '<span class="badge badge-muted badge-plain">Terkait</span>';
+    }
+
+    return '<li class="mf-item card" data-state="' + st + '"' +
+      (mfIsMine(item) ? ' data-mine="true"' : '') + '>' +
+      '<div class="mf-item-main">' +
+      '<p class="mf-item-title">' + esc(item.agenda) + '</p>' +
+      (item.sub ? '<p class="mf-item-sub">' + esc(item.sub) + '</p>' : '') +
+      '<p class="mf-item-facts">' + facts + '</p>' +
+      (item.needs
+        ? '<p class="mf-item-needs">' + icon('inbox') + '<span>' + esc(item.needs) + '</span></p>'
+        : '') +
+      (cf.length && st !== 'done'
+        ? '<p class="mf-item-warn" data-level="' + mfWorstLevel(cf) + '">' + icon('alert') +
+        '<span>' + cf.map(function (c) { return esc(c.label); }).join(' · ') + '</span></p>'
+        : '') +
+      '</div>' +
+      '<div class="mf-item-side">' + tags + '</div>' +
+      '</li>';
+  }
+
+  function renderMathfest(now) {
+    var title = MATHFEST.name || 'Kepanitiaan';
+
+    if (!MF_ITEMS.length) {
+      return '<header class="greeting"><h1>' + esc(title) + '</h1></header>' +
+        emptyState('Belum ada timeline',
+          'Tambahkan entri pada mathfestTimeline di data.js.');
+    }
+
+    var scope = filters.mfScope;
+    var status = filters.mfStatus;
+
+    var mine = MF_ITEMS.filter(mfIsMine);
+    var mineLive = mine.filter(function (it) { return mfStatus(it, now) === 'live'; }).length;
+    var mineNext = mine.filter(function (it) { return mfStatus(it, now) === 'upcoming'; }).length;
+
+    var html = '<header class="greeting"><h1>' + esc(title) + '</h1>' +
+      '<p class="greeting-meta"><span>' +
+      esc([MATHFEST.role, MATHFEST.organization].filter(Boolean).join(' · ')) +
+      '</span></p></header>';
+
+    html += '<div class="dash-grid"><div class="dash-col">';
+    html += mfFocusCard(now);
+    html += mfAlertSection(now);
+    html += '</div><div class="dash-col">';
+
+    html += '<section class="card card-pad" aria-labelledby="mf-load-heading">' +
+      '<div class="section-head"><h2 id="mf-load-heading">Ringkasan Divisi</h2></div>' +
+      '<div class="load-figures">' +
+      mfFigure(mineLive, 'Sedang Berjalan', false) +
+      mfFigure(mineNext, 'Akan Datang', false) +
+      mfFigure(mine.length, 'Total Agenda Divisi', true) +
+      '</div>' +
+      '<p class="section-hint" style="margin:16px 0 0">Dari ' + MF_ITEMS.length +
+      ' agenda pada timeline kepanitiaan, ' + mine.length +
+      ' di antaranya menjadi tanggung jawab atau berkaitan langsung dengan ' +
+      esc(MATHFEST.role || 'divisimu') + '.</p>' +
+      '</section>';
+    html += '</div></div>';
+
+    /* Filter */
+    html += '<div class="filter-bar" style="margin:28px 0 24px">' +
+      '<div class="filter-row"><span class="section-label" id="mf-scope-label">Lingkup</span>' +
+      '<div class="chip-group" role="group" aria-labelledby="mf-scope-label">' +
+      chip('mfScope', 'saya', (MATHFEST.role || 'Divisi Saya'), false) +
+      chip('mfScope', 'semua', 'Semua Divisi', false) +
+      '</div></div>' +
+      '<div class="filter-row"><span class="section-label" id="mf-status-label">Status</span>' +
+      '<div class="chip-group" role="group" aria-labelledby="mf-status-label">' +
+      chip('mfStatus', 'all', 'Semua', false) +
+      chip('mfStatus', 'live', 'Berjalan', false) +
+      chip('mfStatus', 'upcoming', 'Akan Datang', false) +
+      chip('mfStatus', 'done', 'Selesai', false) +
+      '</div></div></div>';
+
+    var visible = MF_ITEMS.filter(function (it) {
+      if (scope === 'saya' && !mfIsMine(it)) return false;
+      if (status !== 'all' && mfStatus(it, now) !== status) return false;
+      return true;
+    });
+
+    if (!visible.length) {
+      return html + emptyState('Tidak ada yang cocok',
+        'Tidak ada agenda pada kombinasi filter ini. Coba ubah lingkup atau status.');
+    }
+
+    /* Kelompokkan per fase; agenda dengan fase tak dikenal dikumpulkan di akhir
+       supaya tidak pernah hilang diam-diam dari tampilan. */
+    var rendered = {};
+    var groups = MF_PHASES.map(function (ph) {
+      var list = visible.filter(function (it) { return it.phase === ph.id; });
+      list.forEach(function (it) { rendered[it.id] = true; });
+      return { label: ph.label, list: list };
+    });
+    var leftover = visible.filter(function (it) { return !rendered[it.id]; });
+    if (leftover.length) groups.push({ label: 'Agenda Lain', list: leftover });
+
+    html += '<div class="stack">';
+    groups.forEach(function (g) {
+      if (!g.list.length) return;
+      html += '<section class="mf-phase" aria-label="' + esc(g.label) + '">' +
+        '<div class="section-head"><h2>' + esc(g.label) + '</h2>' +
+        '<span class="count">' + g.list.length + ' agenda</span></div>' +
+        '<ul class="mf-list">' +
+        g.list.map(function (it) { return mfItemRow(it, now); }).join('') +
+        '</ul></section>';
+    });
+    html += '</div>';
+
+    return html;
+  }
+
+  /* ==========================================================================
+     12. VIEW: PENCARIAN
      ======================================================================== */
 
   function renderSearch(query) {
@@ -910,14 +1318,15 @@
   }
 
   /* ==========================================================================
-     12. ROUTER & RENDER
+     13. ROUTER & RENDER
      ======================================================================== */
 
   var VIEWS = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
     { id: 'jadwal', label: 'Jadwal', icon: 'calendar' },
     { id: 'aktivitas', label: 'Aktivitas', icon: 'book' },
-    { id: 'bimbingan', label: 'Bimbingan', icon: 'mentor' }
+    { id: 'bimbingan', label: 'Bimbingan', icon: 'mentor' },
+    { id: 'mathfest', label: 'Mathfest', icon: 'sparkles' }
   ];
 
   var dom = {};
@@ -941,6 +1350,8 @@
         dom.views.aktivitas.innerHTML = renderAktivitas();
       } else if (currentView === 'bimbingan') {
         dom.views.bimbingan.innerHTML = renderBimbingan();
+      } else if (currentView === 'mathfest') {
+        dom.views.mathfest.innerHTML = renderMathfest(now);
       }
     } catch (err) {
       console.error('Gagal merender tampilan:', err);
@@ -978,7 +1389,7 @@
   }
 
   /* ==========================================================================
-     13. MESIN REALTIME
+     14. MESIN REALTIME
      ======================================================================== */
 
   function signature(now) {
@@ -1052,7 +1463,7 @@
   }
 
   /* ==========================================================================
-     14. TEMA
+     15. TEMA
      ======================================================================== */
 
   function currentTheme() {
@@ -1087,7 +1498,7 @@
   }
 
   /* ==========================================================================
-     15. PENCARIAN — UI
+     16. PENCARIAN — UI
      ======================================================================== */
 
   function syncSearchAffordances() {
@@ -1123,7 +1534,7 @@
   }
 
   /* ==========================================================================
-     16. INISIALISASI
+     17. INISIALISASI
      ======================================================================== */
 
   function fillProfile() {
@@ -1230,6 +1641,7 @@
         jadwal: document.getElementById('view-jadwal'),
         aktivitas: document.getElementById('view-aktivitas'),
         bimbingan: document.getElementById('view-bimbingan'),
+        mathfest: document.getElementById('view-mathfest'),
         search: document.getElementById('view-search')
       }
     };
