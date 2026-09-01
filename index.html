@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Dashboard akademik pribadi Semester 7 — jadwal kuliah, beban SKS, aktivitas akademik, dan bimbingan dalam satu tempat.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#F7F7F5" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B0B0C" media="(prefers-color-scheme: dark)">
+  <title>Semester 7 · Restu Mandiri</title>
+
+  <!-- Terapkan tema sebelum paint pertama agar tidak ada kedipan warna. -->
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem('s7os.theme');
+        var theme = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) { /* localStorage tidak tersedia — pakai default light */ }
+    })();
+  </script>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <a class="skip-link" href="#main">Lewati ke konten utama</a>
+
+  <header class="app-header">
+    <div class="shell header-top">
+      <div class="identity">
+        <span class="avatar" aria-hidden="true" id="profile-initials"></span>
+        <span class="identity-text">
+          <span class="identity-name" id="profile-name"></span>
+          <span class="identity-meta" id="profile-meta"></span>
+        </span>
+      </div>
+
+      <div class="header-actions">
+        <search class="search-field">
+          <label class="sr-only" for="search-input">Cari mata kuliah, dosen, ruangan, atau aktivitas</label>
+          <svg class="icon search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4.5 4.5"></path>
+          </svg>
+          <input
+            id="search-input"
+            type="search"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Cari mata kuliah, dosen, ruangan…"
+            aria-describedby="search-hint">
+          <span class="sr-only" id="search-hint">Tekan garis miring untuk fokus ke pencarian, Escape untuk menutup.</span>
+          <kbd class="search-kbd" aria-hidden="true">/</kbd>
+          <button type="button" class="search-clear" id="search-clear" hidden aria-label="Bersihkan pencarian">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+              <path d="m6.5 6.5 11 11M17.5 6.5l-11 11"></path>
+            </svg>
+          </button>
+        </search>
+
+        <button type="button" class="icon-button" id="theme-toggle" aria-label="Ganti tema">
+          <svg class="icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 2.6v2.1M12 19.3v2.1M4.4 4.4l1.5 1.5M18.1 18.1l1.5 1.5M2.6 12h2.1M19.3 12h2.1M4.4 19.6l1.5-1.5M18.1 5.9l1.5-1.5"></path>
+          </svg>
+          <svg class="icon icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20.5 14.6A8.7 8.7 0 0 1 9.4 3.5a8.7 8.7 0 1 0 11.1 11.1Z"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="shell">
+      <nav class="tabs" id="tabs" aria-label="Navigasi utama"></nav>
+    </div>
+  </header>
+
+  <main class="shell" id="main" tabindex="-1">
+    <div class="view" id="view-dashboard" data-view="dashboard" aria-label="Dashboard"></div>
+    <div class="view" id="view-jadwal" data-view="jadwal" aria-label="Jadwal" hidden></div>
+    <div class="view" id="view-aktivitas" data-view="aktivitas" aria-label="Aktivitas akademik" hidden></div>
+    <div class="view" id="view-bimbingan" data-view="bimbingan" aria-label="Bimbingan akademik" hidden></div>
+    <div class="view" id="view-search" data-view="search" aria-label="Hasil pencarian" hidden></div>
+  </main>
+
+  <footer class="app-footer">
+    <div class="shell footer-inner">
+      <span id="footer-identity"></span>
+      <span class="footer-note">Data akademik dikelola di <code>data.js</code></span>
+    </div>
+  </footer>
+
+  <p class="sr-only" id="live-region" aria-live="polite"></p>
+
+  <script src="data.js"></script>
+  <script src="script.js" defer></script>
+</body>
+</html>

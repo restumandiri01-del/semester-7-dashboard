@@ -1,0 +1,1255 @@
+/* ============================================================================
+   Semester 7 Academic OS — script.js
+   ----------------------------------------------------------------------------
+   Seluruh data akademik dibaca dari data.js. File ini hanya berisi logika:
+   turunan data, render, mesin realtime, navigasi, pencarian, filter, dan tema.
+   ========================================================================== */
+
+(function () {
+  'use strict';
+
+  /* ==========================================================================
+     1. DATA SOURCE  — dibaca sekali, tidak pernah diduplikasi
+     ======================================================================== */
+
+  var PROFILE = { name: '—', initials: '—', nim: '—', program: '—', semester: '—', academicYear: '—' };
+  var CONFIG = { startDate: null, endDate: null, semester: '—', academicYear: '—' };
+  var CLASSES = [];
+  var ACTIVITIES = [];
+  var GUIDANCE = [];
+  var CATEGORIES = {};
+  var CALENDAR = [];
+
+  try { PROFILE = Object.assign(PROFILE, profileData); } catch (e) {}
+  try { CONFIG = Object.assign(CONFIG, semesterConfig); } catch (e) {}
+  try { if (Array.isArray(scheduleData)) CLASSES = scheduleData.slice(); } catch (e) {}
+  try { if (Array.isArray(academicActivities)) ACTIVITIES = academicActivities.slice(); } catch (e) {}
+  try { if (Array.isArray(guidanceData)) GUIDANCE = guidanceData.slice(); } catch (e) {}
+  try { CATEGORIES = Object.assign({}, categoryLabels); } catch (e) {}
+  try { if (Array.isArray(academicCalendar)) CALENDAR = academicCalendar.slice(); } catch (e) {}
+
+  CLASSES.sort(function (a, b) {
+    return a.day - b.day || toMinutes(a.start) - toMinutes(b.start);
+  });
+
+  /* --------------------------------------------------------------------------
+     SESSIONS = semua kegiatan yang punya slot mingguan tetap.
+     Perkuliahan reguler + aktivitas akademik yang sudah dijadwalkan.
+     Dipakai oleh jadwal hari ini, kelas berikutnya, status, dan jadwal mingguan.
+     SKS-nya TIDAK dijumlahkan di sini — beban akademik tetap dihitung terpisah
+     supaya pemisahan 15 / 7 / 22 SKS tetap utuh.
+     ------------------------------------------------------------------------ */
+  var SESSIONS = CLASSES.map(function (c) {
+    return {
+      id: c.id, name: c.name, code: c.code || null, day: c.day,
+      start: c.start, end: c.end, sks: c.sks, room: c.room,
+      lecturer: c.lecturer, kind: c.kind, category: c.category,
+      classGroup: c.classGroup || null, type: 'perkuliahan'
+    };
+  });
+
+  ACTIVITIES.forEach(function (a) {
+    if (!a.session) return;
+    SESSIONS.push({
+      id: 'sesi-' + a.id, name: a.name, code: a.code || null, day: a.session.day,
+      start: a.session.start, end: a.session.end, sks: a.sks, room: a.session.room,
+      lecturer: a.session.lecturer || a.supervisor, kind: CATEGORIES[a.category] || 'Aktivitas Akademik',
+      category: a.category, classGroup: a.classGroup || null, type: 'aktivitas'
+    });
+  });
+
+  SESSIONS.sort(function (a, b) {
+    return a.day - b.day || toMinutes(a.start) - toMinutes(b.start);
+  });
+
+  /* ==========================================================================
+     2. KONSTANTA & UTILITAS
+     ======================================================================== */
+
+  var DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  var WEEK_DAYS = [1, 2, 3, 4, 5, 6];
+  var MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  var MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  var EMPTY = 'Belum ditentukan';
+  var LOAD_ORDER = ['studi-literatur', 'seminar-studi-literatur', 'kkn', 'skripsi-1'];
+
+  function esc(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function toMinutes(hhmm) {
+    var parts = String(hhmm || '0:0').split(':');
+    var h = parseInt(parts[0], 10) || 0;
+    var m = parseInt(parts[1], 10) || 0;
+    return h * 60 + m;
+  }
+
+  /** '09:30' → '09.30' (konvensi waktu Indonesia) */
+  function clock(hhmm) { return String(hhmm || '').replace(':', '.'); }
+
+  function pad(n) { return n < 10 ? '0' + n : String(n); }
+
+  function duration(cls, long) {
+    var total = toMinutes(cls.end) - toMinutes(cls.start);
+    if (total <= 0) return '—';
+    var h = Math.floor(total / 60);
+    var m = total % 60;
+    if (long) {
+      return (h ? h + ' jam' : '') + (h && m ? ' ' : '') + (m ? m + ' menit' : '');
+    }
+    return (h ? h + 'j' : '') + (h && m ? ' ' : '') + (m ? m + 'm' : '');
+  }
+
+  function formatDate(date) {
+    try {
+      return new Intl.DateTimeFormat('id-ID', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+      }).format(date);
+    } catch (e) {
+      return DAY_NAMES[date.getDay()] + ', ' + date.getDate() + ' ' +
+        MONTHS[date.getMonth()] + ' ' + date.getFullYear();
+    }
+  }
+
+  function parseISODate(value) {
+    if (!value) return null;
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value).trim());
+    if (!m) return null;
+    var d = new Date(+m[1], +m[2] - 1, +m[3]);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function shortDate(d) { return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()]; }
+
+  /** '2026-09-10' + '2026-09-12' → '10–12 Sep 2026' */
+  function dateRangeLabel(startISO, endISO) {
+    var s = parseISODate(startISO);
+    var e = parseISODate(endISO) || s;
+    if (!s) return EMPTY;
+    if (s.getTime() === e.getTime()) return shortDate(s) + ' ' + s.getFullYear();
+    if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) {
+      return s.getDate() + '–' + e.getDate() + ' ' + MONTHS_SHORT[e.getMonth()] + ' ' + e.getFullYear();
+    }
+    return shortDate(s) + ' – ' + shortDate(e) + ' ' + e.getFullYear();
+  }
+
+  function calendarStatus(ev, now) {
+    var s = parseISODate(ev.start);
+    var e = parseISODate(ev.end) || s;
+    if (!s) return 'upcoming';
+    var endOfDay = new Date(e.getFullYear(), e.getMonth(), e.getDate(), 23, 59, 59, 999);
+    if (now < s) return 'upcoming';
+    if (now <= endOfDay) return 'live';
+    return 'done';
+  }
+
+  function daysUntil(iso, now) {
+    var target = parseISODate(iso);
+    if (!target) return null;
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.round((target - today) / 86400000);
+  }
+
+  /** Slot mingguan sebuah aktivitas → 'Sabtu, 10.20–12.00' */
+  function sessionLabel(s) {
+    return DAY_NAMES[s.day] + ', ' + clock(s.start) + '–' + clock(s.end);
+  }
+
+  function greetingFor(hour) {
+    if (hour >= 5 && hour < 11) return 'Selamat pagi';
+    if (hour >= 11 && hour < 15) return 'Selamat siang';
+    if (hour >= 15 && hour < 18) return 'Selamat sore';
+    return 'Selamat malam';
+  }
+
+  function greetingBucket(hour) {
+    if (hour >= 5 && hour < 11) return 'pagi';
+    if (hour >= 11 && hour < 15) return 'siang';
+    if (hour >= 15 && hour < 18) return 'sore';
+    return 'malam';
+  }
+
+  function value(text) {
+    return text
+      ? '<span class="meta-value">' + esc(text) + '</span>'
+      : '<span class="meta-value is-empty">' + EMPTY + '</span>';
+  }
+
+  function metaItem(label, text) {
+    return '<div class="meta-item"><span class="meta-label">' + esc(label) + '</span>' + value(text) + '</div>';
+  }
+
+  /* ==========================================================================
+     3. IKON — satu sistem, stroke 1.5, viewBox 24
+     ======================================================================== */
+
+  var ICONS = {
+    dashboard: '<path d="M4 10.4 12 4l8 6.4V19a1.5 1.5 0 0 1-1.5 1.5H15V14H9v6.5H5.5A1.5 1.5 0 0 1 4 19v-8.6Z"/>',
+    calendar: '<rect x="3.5" y="5.2" width="17" height="15.3" rx="2.4"/><path d="M8.2 3v4M15.8 3v4M3.5 10.2h17"/>',
+    book: '<path d="M12 6.6S10 4.6 4.2 4.6v12.8c5.8 0 7.8 2 7.8 2s2-2 7.8-2V4.6C14 4.6 12 6.6 12 6.6Z"/><path d="M12 6.6v12.8"/>',
+    mentor: '<circle cx="9.4" cy="8.2" r="3.3"/><path d="M3.4 19.8a6 6 0 0 1 12 0"/><path d="M16.4 5.4a3.3 3.3 0 0 1 0 5.6"/><path d="M17.8 14.6a6 6 0 0 1 2.8 5.2"/>',
+    clock: '<circle cx="12" cy="12" r="8.6"/><path d="M12 7.2V12l3.1 1.9"/>',
+    pin: '<path d="M12 20.8s-6.3-5.2-6.3-9.8a6.3 6.3 0 1 1 12.6 0c0 4.6-6.3 9.8-6.3 9.8Z"/><circle cx="12" cy="10.8" r="2.3"/>',
+    user: '<circle cx="12" cy="8" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/>',
+    layers: '<path d="m12 3.4 8.4 4.4L12 12.2 3.6 7.8 12 3.4Z"/><path d="m3.6 12.2 8.4 4.4 8.4-4.4"/><path d="m3.6 16.4 8.4 4.4 8.4-4.4"/>',
+    search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>',
+    chevron: '<path d="m9.6 6 6 6-6 6"/>',
+    inbox: '<path d="M3.8 13.2h4l1.5 2.3h5.4l1.5-2.3h4"/><path d="M6.6 4.4h10.8l3 8.8v4.4a2 2 0 0 1-2 2H5.6a2 2 0 0 1-2-2v-4.4l3-8.8Z"/>',
+    info: '<circle cx="12" cy="12" r="8.6"/><path d="M12 11.2v5.2"/><circle cx="12" cy="7.9" r=".95" fill="currentColor" stroke="none"/>',
+    check: '<path d="m5.2 12.6 4.4 4.4L18.8 7.6"/>',
+    sparkles: '<path d="M12 3.6 13.7 9l5.4 1.7-5.4 1.7L12 17.8l-1.7-5.4L4.9 10.7 10.3 9 12 3.6Z"/><path d="M18.6 16.4l.7 2.2 2.2.7-2.2.7-.7 2.2-.7-2.2-2.2-.7 2.2-.7.7-2.2Z"/>'
+  };
+
+  function icon(name, extra) {
+    var path = ICONS[name] || '';
+    return '<svg class="icon' + (extra ? ' ' + extra : '') + '" viewBox="0 0 24 24" fill="none" ' +
+      'stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" ' +
+      'aria-hidden="true" focusable="false">' + path + '</svg>';
+  }
+
+  /* ==========================================================================
+     4. TURUNAN DATA (selectors)
+     ======================================================================== */
+
+  var LOAD = (function () {
+    var scheduled = CLASSES.reduce(function (sum, c) { return sum + (c.sks || 0); }, 0);
+    var extra = ACTIVITIES.reduce(function (sum, a) { return sum + (a.sks || 0); }, 0);
+
+    var breakdown = [{ id: 'perkuliahan', name: 'Perkuliahan', sks: scheduled }];
+    ACTIVITIES.slice().sort(function (a, b) {
+      var ia = LOAD_ORDER.indexOf(a.id); var ib = LOAD_ORDER.indexOf(b.id);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    }).forEach(function (a) {
+      breakdown.push({ id: a.id, name: a.name, sks: a.sks || 0 });
+    });
+
+    return { scheduled: scheduled, extra: extra, total: scheduled + extra, breakdown: breakdown };
+  })();
+
+  function classesOn(day) {
+    return SESSIONS.filter(function (c) { return c.day === day; });
+  }
+
+  /** Status kegiatan dalam kerangka pekan berjalan (Senin–Sabtu). */
+  function statusOf(cls, now) {
+    var today = now.getDay();
+    if (today === 0) return 'upcoming';               // Minggu — pekan kuliah belum dimulai
+    if (cls.day === today) {
+      var mins = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+      if (mins < toMinutes(cls.start)) return 'upcoming';
+      if (mins < toMinutes(cls.end)) return 'live';
+      return 'done';
+    }
+    return cls.day > today ? 'upcoming' : 'done';
+  }
+
+  var STATUS_LABEL = { live: 'Sedang Berlangsung', upcoming: 'Akan Datang', done: 'Selesai' };
+  var STATUS_TONE = { live: 'success', upcoming: 'neutral', done: 'muted' };
+
+  function statusBadge(state) {
+    return '<span class="badge badge-' + STATUS_TONE[state] + (state === 'live' ? ' badge-live' : '') + '">' +
+      STATUS_LABEL[state] + '</span>';
+  }
+
+  function liveClass(now) {
+    var day = now.getDay();
+    var mins = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+    for (var i = 0; i < SESSIONS.length; i++) {
+      var c = SESSIONS[i];
+      if (c.day === day && mins >= toMinutes(c.start) && mins < toMinutes(c.end)) return c;
+    }
+    return null;
+  }
+
+  /** Tanggal kemunculan berikutnya untuk sebuah kelas, relatif terhadap `from`. */
+  function nextOccurrence(cls, from) {
+    var d = new Date(from.getTime());
+    d.setDate(d.getDate() + ((cls.day - from.getDay() + 7) % 7));
+    d.setHours(toMinutes(cls.start) / 60 | 0, toMinutes(cls.start) % 60, 0, 0);
+    if (d.getTime() <= from.getTime()) d.setDate(d.getDate() + 7);
+    return d;
+  }
+
+  function occurrenceEnd(cls, from) {
+    var d = new Date(from.getTime());
+    d.setHours(toMinutes(cls.end) / 60 | 0, toMinutes(cls.end) % 60, 0, 0);
+    return d;
+  }
+
+  function occurrenceStart(cls, from) {
+    var d = new Date(from.getTime());
+    d.setHours(toMinutes(cls.start) / 60 | 0, toMinutes(cls.start) % 60, 0, 0);
+    return d;
+  }
+
+  function nextClass(now) {
+    var best = null;
+    SESSIONS.forEach(function (c) {
+      var at = nextOccurrence(c, now);
+      if (!best || at.getTime() < best.at.getTime()) best = { cls: c, at: at };
+    });
+    return best;
+  }
+
+  function formatCountdown(ms) {
+    if (!isFinite(ms) || ms < 0) ms = 0;
+    var total = Math.floor(ms / 1000);
+    var days = Math.floor(total / 86400);
+    var hours = Math.floor((total % 86400) / 3600);
+    var mins = Math.floor((total % 3600) / 60);
+    var secs = total % 60;
+    if (days > 0) {
+      return { text: days + ' hari' + (hours > 0 ? ' ' + hours + ' jam' : ''), words: true };
+    }
+    return { text: pad(hours) + ':' + pad(mins) + ':' + pad(secs), words: false };
+  }
+
+  function semesterProgress(now) {
+    var start = parseISODate(CONFIG.startDate);
+    var end = parseISODate(CONFIG.endDate);
+    if (!start || !end || end <= start) return null;
+    var span = end - start;
+    var done = Math.min(Math.max(now - start, 0), span);
+    return {
+      start: start,
+      end: end,
+      percent: Math.round((done / span) * 100),
+      weeksLeft: Math.max(0, Math.ceil((end - now) / (7 * 86400000)))
+    };
+  }
+
+  /* ==========================================================================
+     5. INDEKS PENCARIAN
+     ======================================================================== */
+
+  var INDEX = (function () {
+    var items = [];
+
+    CLASSES.forEach(function (c) {
+      items.push({
+        kind: 'class', ref: c, icon: 'calendar',
+        title: c.name,
+        categoryLabel: CATEGORIES.perkuliahan || 'Perkuliahan',
+        category: 'perkuliahan',
+        meta: DAY_NAMES[c.day] + ' · ' + clock(c.start) + '–' + clock(c.end) + ' · ' + c.room + ' · ' + c.lecturer + ' · ' + c.sks + ' SKS',
+        terms: [c.name, c.lecturer, c.room, c.kind, DAY_NAMES[c.day], 'perkuliahan', 'kuliah', 'mata kuliah', clock(c.start), clock(c.end)]
+      });
+    });
+
+    ACTIVITIES.forEach(function (a) {
+      var when = a.session
+        ? sessionLabel(a.session) + ' · ' + a.session.room
+        : 'Belum dijadwalkan';
+      items.push({
+        kind: 'activity', ref: a, icon: 'book',
+        title: a.name,
+        categoryLabel: CATEGORIES[a.category] || 'Aktivitas',
+        category: a.category,
+        meta: a.sks + ' SKS · ' + when + (a.supervisor ? ' · ' + a.supervisor : '') + (a.topic ? ' · ' + a.topic : ''),
+        terms: [a.name, a.code, a.topic, a.supervisor, a.status, CATEGORIES[a.category], 'aktivitas akademik',
+          a.classGroup ? 'kelas ' + a.classGroup : null,
+          a.session ? DAY_NAMES[a.session.day] : null,
+          a.session ? a.session.room : null,
+          a.session ? clock(a.session.start) : null]
+      });
+    });
+
+    GUIDANCE.forEach(function (g) {
+      items.push({
+        kind: 'guidance', ref: g, icon: 'mentor',
+        title: 'Bimbingan ' + g.type,
+        categoryLabel: CATEGORIES.bimbingan || 'Bimbingan',
+        category: 'bimbingan',
+        meta: (g.topic || EMPTY) + ' · ' + (g.supervisor || EMPTY) + ' · ' + g.status,
+        terms: [g.type, g.topic, g.supervisor, g.status, 'bimbingan', 'pembimbing']
+      });
+    });
+
+    items.forEach(function (i) {
+      i.haystack = i.terms.filter(Boolean).join(' ').toLowerCase();
+    });
+    return items;
+  })();
+
+  function runSearch(query) {
+    var q = String(query || '').trim().toLowerCase();
+    if (!q) return [];
+    var tokens = q.split(/\s+/);
+    return INDEX.filter(function (item) {
+      return tokens.every(function (t) { return item.haystack.indexOf(t) !== -1; });
+    });
+  }
+
+  function highlight(text, query) {
+    var safe = esc(text);
+    var q = String(query || '').trim();
+    if (!q) return safe;
+    try {
+      var needle = esc(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return safe.replace(new RegExp('(' + needle + ')', 'ig'), '<mark>$1</mark>');
+    } catch (e) {
+      return safe;
+    }
+  }
+
+  /* ==========================================================================
+     6. KOMPONEN
+     ======================================================================== */
+
+  function emptyState(title, text, compact) {
+    return '<div class="empty-state' + (compact ? ' is-compact' : '') + '">' +
+      icon('inbox') +
+      '<p class="empty-state-title">' + esc(title) + '</p>' +
+      (text ? '<p class="empty-state-text">' + esc(text) + '</p>' : '') +
+      '</div>';
+  }
+
+  function scheduleRow(cls, now) {
+    var state = statusOf(cls, now);
+    return '<li class="schedule-row" data-state="' + state + '">' +
+      '<span class="row-time"><span class="start">' + clock(cls.start) + '</span>' +
+      '<span class="end">' + clock(cls.end) + '</span></span>' +
+      '<span class="row-body">' +
+      '<span class="row-title">' + esc(cls.name) + '</span>' +
+      '<span class="row-meta">' + esc(cls.room) + '<span class="dot-sep">·</span>' +
+      esc(cls.lecturer) + '<span class="dot-sep">·</span>' + cls.sks + ' SKS</span>' +
+      '</span>' + statusBadge(state) + '</li>';
+  }
+
+  function classCard(cls, now) {
+    var state = statusOf(cls, now);
+    return '<article class="class-card" data-state="' + state + '" data-type="' + cls.type + '">' +
+      (cls.type === 'aktivitas'
+        ? '<p class="cc-kicker">' + esc(cls.kind) + (cls.classGroup ? ' · Kelas ' + esc(cls.classGroup) : '') + '</p>'
+        : '') +
+      '<h3 class="cc-title">' + esc(cls.name) + '</h3>' +
+      '<p class="cc-time"><span>' + clock(cls.start) + '–' + clock(cls.end) + '</span>' +
+      '<span class="cc-duration">' + duration(cls) + '</span></p>' +
+      '<div class="cc-facts">' +
+      '<span>' + icon('pin') + esc(cls.room) + '</span>' +
+      '<span>' + icon('user') + esc(cls.lecturer) + '</span>' +
+      '<span>' + icon('layers') + cls.sks + ' SKS</span>' +
+      '</div>' +
+      '<div class="cc-foot">' + statusBadge(state) + '</div>' +
+      '</article>';
+  }
+
+  /* --------------------------------------------------------------------------
+     Kartu fokus: kelas yang sedang berlangsung, atau kelas berikutnya
+     ------------------------------------------------------------------------ */
+  function focusCard(now) {
+    var live = liveClass(now);
+    var next = nextClass(now);
+
+    if (!live && !next) {
+      return '<section class="focus-card" data-state="empty" aria-labelledby="focus-heading">' +
+        '<p class="section-label" id="focus-heading">Kelas Berikutnya</p>' +
+        '<p class="focus-title" style="margin-top:10px">Tidak ada jadwal kuliah</p>' +
+        '<p class="focus-sub">Belum ada mata kuliah yang terdaftar di <code>data.js</code>.</p>' +
+        '</section>';
+    }
+
+    var cls = live || next.cls;
+    var state = live ? 'live' : 'upcoming';
+    var target = live ? occurrenceEnd(cls, now) : next.at;
+    var cd = formatCountdown(target - now);
+
+    var html = '<section class="focus-card" data-state="' + state + '" aria-labelledby="focus-heading">';
+
+    var noun = cls.type === 'aktivitas' ? 'Kegiatan' : 'Kelas';
+    html += '<div class="focus-top">' +
+      '<p class="section-label" id="focus-heading">' + noun + (live ? ' Sekarang' : ' Berikutnya') + '</p>' +
+      (live ? statusBadge('live') : '<span class="focus-day">' + DAY_NAMES[cls.day] +
+        (isSameDay(next.at, now) ? ' · hari ini' : '') + '</span>') +
+      '</div>';
+
+    html += '<h2 class="focus-title">' + esc(cls.name) + '</h2>' +
+      '<p class="focus-sub"><span class="time">' + clock(cls.start) + '–' + clock(cls.end) + '</span>' +
+      '<span class="dot-sep">·</span>' + duration(cls, true) + '<span class="dot-sep">·</span>' + cls.sks + ' SKS</p>';
+
+    html += '<div class="countdown-block">' +
+      '<p class="countdown-label">' + (live ? 'Berakhir dalam' : 'Dimulai dalam') + '</p>' +
+      '<p class="countdown-value' + (cd.words ? ' is-words' : '') + '" id="countdown-value">' + cd.text + '</p>';
+
+    if (live) {
+      var s = occurrenceStart(cls, now);
+      var e = occurrenceEnd(cls, now);
+      var pct = Math.min(100, Math.max(0, ((now - s) / (e - s)) * 100));
+      html += '<div class="progress-track" role="img" aria-label="Kelas berjalan ' + Math.round(pct) + ' persen">' +
+        '<span class="progress-fill" id="progress-fill" style="width:' + pct.toFixed(2) + '%"></span></div>' +
+        '<p class="progress-caption"><span>' + clock(cls.start) + '</span><span>' + clock(cls.end) + '</span></p>';
+    }
+    html += '</div>';
+
+    html += '<div class="focus-details"><div class="meta-grid">' +
+      metaItem('Ruangan', cls.room) +
+      metaItem(cls.type === 'aktivitas' ? 'Pembimbing' : 'Dosen', cls.lecturer) +
+      metaItem('SKS', cls.sks + ' SKS') +
+      metaItem(cls.classGroup ? 'Kelas' : 'Jenis', cls.classGroup || cls.kind) +
+      '</div></div>';
+
+    // Kelas menyusul di hari yang sama
+    var following = null;
+    if (live) {
+      following = classesOn(now.getDay()).filter(function (c) {
+        return toMinutes(c.start) >= toMinutes(cls.end);
+      })[0] || null;
+    }
+    if (following) {
+      html += '<p class="focus-after">Menyusul hari ini · <strong>' + esc(following.name) + '</strong> ' +
+        'pukul ' + clock(following.start) + ' di ' + esc(following.room) + '</p>';
+    }
+
+    html += '</section>';
+    return html;
+  }
+
+  function isSameDay(a, b) {
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  }
+
+  /* ==========================================================================
+     7. VIEW: DASHBOARD
+     ======================================================================== */
+
+  function renderDashboard(now) {
+    var today = now.getDay();
+    var todays = classesOn(today);
+
+    var html = '';
+
+    /* Sapaan */
+    html += '<header class="greeting">' +
+      '<h1>' + greetingFor(now.getHours()) + ', ' + esc(PROFILE.name.split(' ')[0]) + '</h1>' +
+      '<p class="greeting-meta"><span>' + esc(formatDate(now)) + '</span>' +
+      '<span class="greeting-clock" id="live-clock">' +
+      pad(now.getHours()) + '.' + pad(now.getMinutes()) + '.' + pad(now.getSeconds()) + '</span></p>' +
+      '</header>';
+
+    html += '<div class="dash-grid">';
+
+    /* ---- Kolom utama ---- */
+    html += '<div class="dash-col">';
+    html += focusCard(now);
+
+    html += '<section id="today-section" aria-labelledby="today-heading">' +
+      '<div class="section-head"><h2 id="today-heading">Jadwal Hari Ini</h2>' +
+      '<span class="count">' + (todays.length ? todays.length + ' kegiatan · ' +
+        todays.reduce(function (s, c) { return s + c.sks; }, 0) + ' SKS' : 'Kosong') + '</span></div>';
+
+    if (todays.length) {
+      html += '<div class="card"><ul class="schedule-list">' +
+        todays.map(function (c) { return scheduleRow(c, now); }).join('') +
+        '</ul></div>';
+    } else if (today === 0) {
+      html += emptyState('Hari Minggu',
+        'Tidak ada kegiatan akademik terjadwal. Kegiatan berikutnya sudah ditampilkan di atas.');
+    } else {
+      html += emptyState('Tidak ada kegiatan hari ini',
+        DAY_NAMES[today] + ' tidak memiliki jadwal pada Semester 7. Waktu ini tersedia untuk studi literatur atau bimbingan.');
+    }
+    html += '</section>';
+    html += '</div>';
+
+    /* ---- Kolom samping ---- */
+    html += '<div class="dash-col">';
+
+    /* Beban akademik */
+    html += '<section class="card card-pad" aria-labelledby="load-heading">' +
+      '<div class="section-head"><h2 id="load-heading">Beban Akademik</h2></div>' +
+      '<div class="load-figures">' +
+      loadFigure(LOAD.scheduled, 'Perkuliahan Reguler', false) +
+      loadFigure(LOAD.extra, 'Aktivitas Tambahan', false) +
+      loadFigure(LOAD.total, 'Total Beban Semester', true) +
+      '</div>' +
+      '<div class="load-bar" role="img" aria-label="Komposisi beban akademik: ' +
+      LOAD.breakdown.map(function (b) { return b.name + ' ' + b.sks + ' SKS'; }).join(', ') + '">' +
+      LOAD.breakdown.map(function (b) {
+        return '<span style="flex:' + b.sks + '"></span>';
+      }).join('') +
+      '</div>' +
+      '<ul class="load-breakdown">' +
+      LOAD.breakdown.map(function (b, i) {
+        return '<li><span class="swatch" style="opacity:' + [1, 0.62, 0.44, 0.3, 0.18][i % 5] + '"></span>' +
+          '<span class="name">' + esc(b.name) + '</span>' +
+          '<span class="sks">' + b.sks + ' SKS</span></li>';
+      }).join('') +
+      '</ul></section>';
+
+    /* Aksi cepat */
+    html += '<section class="card quick-card" aria-labelledby="quick-heading">' +
+      '<div class="card-pad" style="padding-bottom:6px"><h2 id="quick-heading">Aksi Cepat</h2></div>' +
+      '<div class="quick-list">' +
+      quickItem('today', 'clock', 'Hari Ini') +
+      quickItem('jadwal', 'calendar', 'Jadwal Mingguan') +
+      quickItem('aktivitas', 'book', 'Aktivitas Akademik') +
+      quickItem('bimbingan', 'mentor', 'Bimbingan') +
+      '</div></section>';
+
+    /* Progress semester */
+    html += '<section class="card card-pad" aria-labelledby="progress-heading">' +
+      '<div class="section-head"><h2 id="progress-heading">Progress Semester</h2></div>' +
+      semesterProgressBlock(now) +
+      '</section>';
+
+    html += '</div></div>';
+    return html;
+  }
+
+  function loadFigure(n, label, isTotal) {
+    return '<div class="load-figure' + (isTotal ? ' is-total' : '') + '">' +
+      '<span class="value">' + n + ' <span class="unit">SKS</span></span>' +
+      '<span class="label">' + esc(label) + '</span></div>';
+  }
+
+  function quickItem(target, iconName, label) {
+    return '<button type="button" class="quick-item" data-quick="' + target + '">' +
+      icon(iconName) + '<span>' + esc(label) + '</span>' + icon('chevron', 'chev') + '</button>';
+  }
+
+  function semesterProgressBlock(now) {
+    var p = semesterProgress(now);
+    var html = '';
+
+    if (!p) {
+      html = '<p class="semester-note">' + icon('info') +
+        '<span>Progress semester akan aktif setelah tanggal semester dikonfigurasi. ' +
+        'Isi <code>startDate</code> dan <code>endDate</code> pada <code>semesterConfig</code> di <code>data.js</code>.</span></p>';
+    } else {
+      html = '<p class="semester-note">' + icon('clock') +
+        '<span>Semester ' + esc(CONFIG.semester) + ' · ' + esc(CONFIG.academicYear) +
+        ' berjalan <strong>' + p.percent + '%</strong>, tersisa sekitar ' + p.weeksLeft + ' pekan.</span></p>' +
+        '<div class="progress-track" style="margin-top:14px">' +
+        '<span class="progress-fill" style="width:' + p.percent + '%"></span></div>' +
+        '<p class="semester-figures"><span>' + esc(dateRangeLabel(CONFIG.startDate, CONFIG.startDate)) +
+        '</span><span>' + esc(dateRangeLabel(CONFIG.endDate, CONFIG.endDate)) + '</span></p>';
+    }
+
+    if (!CALENDAR.length) return html;
+
+    /* Agenda kalender akademik — tanda "Berikutnya" hanya pada satu agenda
+       terdekat yang belum lewat. */
+    var events = CALENDAR.slice().sort(function (a, b) {
+      return (parseISODate(a.start) || 0) - (parseISODate(b.start) || 0);
+    });
+    var nextMarked = false;
+
+    html += '<div class="agenda"><p class="section-label agenda-label">Agenda Akademik</p><ul>';
+    events.forEach(function (ev) {
+      var state = calendarStatus(ev, now);
+      var tag = '';
+      if (state === 'live') {
+        tag = '<span class="badge badge-success badge-live">Berlangsung</span>';
+      } else if (state === 'upcoming' && !nextMarked) {
+        nextMarked = true;
+        var d = daysUntil(ev.start, now);
+        tag = '<span class="badge badge-neutral">' +
+          (d === 0 ? 'Hari ini' : d === 1 ? 'Besok' : d + ' hari lagi') + '</span>';
+      }
+      html += '<li class="agenda-row" data-state="' + state + '">' +
+        '<span class="agenda-name">' + esc(ev.name) + '</span>' +
+        '<span class="agenda-date">' + esc(dateRangeLabel(ev.start, ev.end)) + '</span>' +
+        (tag ? '<span class="agenda-tag">' + tag + '</span>' : '') +
+        '</li>';
+    });
+    html += '</ul></div>';
+    return html;
+  }
+
+  /* ==========================================================================
+     8. VIEW: JADWAL
+     ======================================================================== */
+
+  var filters = { day: 'all', category: 'all' };
+
+  function renderJadwal(now) {
+    var today = now.getDay();
+    var cat = filters.category;
+    var picked = parseInt(filters.day, 10);
+    var days = (filters.day === 'all' || WEEK_DAYS.indexOf(picked) === -1) ? WEEK_DAYS : [picked];
+
+    var matches = function (s) { return cat === 'all' || s.category === cat; };
+    var visibleSessions = SESSIONS.filter(function (s) {
+      return days.indexOf(s.day) !== -1 && matches(s);
+    });
+
+    /* Saat kategori disaring, hanya hari yang benar-benar berisi yang dirender —
+       kolom kosong berderet tidak memberi informasi apa pun. Pada 'Semua',
+       seluruh hari tetap tampil supaya hari kosong terlihat sebagai empty state. */
+    var shownDays = cat === 'all' ? days : days.filter(function (d) {
+      return visibleSessions.some(function (s) { return s.day === d; });
+    });
+
+    var unscheduled = [];
+    ACTIVITIES.forEach(function (a) {
+      if (a.session) return;                       // sudah tampil di jadwal mingguan
+      if (cat === 'all' || cat === a.category) unscheduled.push({ kind: 'activity', ref: a });
+    });
+    GUIDANCE.forEach(function (g) {
+      if (cat === 'all' || cat === 'bimbingan') unscheduled.push({ kind: 'guidance', ref: g });
+    });
+
+    var extraSessions = SESSIONS.length - CLASSES.length;
+    var html = '<header class="greeting"><h1>Jadwal</h1>' +
+      '<p class="greeting-meta"><span>' + CLASSES.length + ' mata kuliah · ' +
+      LOAD.scheduled + ' SKS perkuliahan reguler' +
+      (extraSessions > 0 ? ' · ' + extraSessions + ' kegiatan akademik terjadwal' : '') +
+      '</span></p></header>';
+
+    /* Filter */
+    html += '<div class="filter-bar" style="margin-bottom:24px">' +
+      '<div class="filter-row"><span class="section-label" id="filter-day-label">Hari</span>' +
+      '<div class="chip-group" role="group" aria-labelledby="filter-day-label">' +
+      chip('day', 'all', 'Semua', false) +
+      WEEK_DAYS.map(function (d) {
+        return chip('day', String(d), DAY_NAMES[d], d === today);
+      }).join('') +
+      '</div></div>' +
+      '<div class="filter-row"><span class="section-label" id="filter-cat-label">Kategori</span>' +
+      '<div class="chip-group" role="group" aria-labelledby="filter-cat-label">' +
+      chip('category', 'all', 'Semua', false) +
+      Object.keys(CATEGORIES).map(function (key) {
+        return chip('category', key, CATEGORIES[key], false);
+      }).join('') +
+      '</div></div></div>';
+
+    if (!shownDays.length && !unscheduled.length) {
+      html += emptyState('Tidak ada yang cocok',
+        'Tidak ada kegiatan pada kombinasi filter ini. Ubah pilihan hari atau kategori.');
+      return html;
+    }
+
+    if (shownDays.length) {
+      html += '<section aria-labelledby="week-heading" style="margin-bottom:28px">' +
+        '<div class="section-head"><h2 id="week-heading">Jadwal Mingguan</h2>' +
+        '<span class="count">' + visibleSessions.length + ' kegiatan</span></div>' +
+        '<div class="week-grid">' +
+        shownDays.map(function (d) { return dayColumn(d, now, matches); }).join('') +
+        '</div></section>';
+    }
+
+    if (unscheduled.length) {
+      html += '<section aria-labelledby="unscheduled-heading">' +
+        '<div class="section-head"><h2 id="unscheduled-heading">Tanpa Jadwal Tetap</h2>' +
+        '<span class="count">' + unscheduled.length + ' kegiatan</span></div>' +
+        '<p class="section-hint">Kegiatan ini belum terikat hari tertentu, sehingga tidak terpengaruh filter hari.</p>' +
+        '<div class="activity-grid">' +
+        unscheduled.map(function (u) {
+          return u.kind === 'activity' ? activityCard(u.ref) : guidanceCard(u.ref);
+        }).join('') +
+        '</div></section>';
+    }
+
+    return html;
+  }
+
+  function chip(group, val, label, isToday) {
+    var pressed = filters[group] === val;
+    return '<button type="button" class="chip" data-filter="' + group + '" data-value="' + esc(val) + '" ' +
+      'aria-pressed="' + pressed + '">' + esc(label) +
+      (isToday ? '<span class="chip-today" aria-label="hari ini"></span>' : '') + '</button>';
+  }
+
+  function dayColumn(day, now, matches) {
+    var list = classesOn(day).filter(matches || function () { return true; });
+    var isToday = day === now.getDay();
+    var sks = list.reduce(function (s, c) { return s + c.sks; }, 0);
+
+    return '<div class="day-column' + (isToday ? ' is-today' : '') + '">' +
+      '<div class="day-head"><span class="day-name">' + DAY_NAMES[day] + '</span>' +
+      (isToday ? '<span class="day-today-tag">Hari ini</span>'
+        : '<span class="day-sks">' + (sks ? sks + ' SKS' : '—') + '</span>') +
+      '</div>' +
+      (list.length
+        ? list.map(function (c) { return classCard(c, now); }).join('')
+        : emptyState('Tidak ada kegiatan', '', true)) +
+      '</div>';
+  }
+
+  /* ==========================================================================
+     9. VIEW: AKTIVITAS
+     ======================================================================== */
+
+  function activityCard(a) {
+    var html = '<article class="card activity-card">' +
+      '<div class="activity-head"><div class="activity-title">' +
+      '<span class="name">' + esc(a.name) + '</span>' +
+      '<span class="sks">' + a.sks + ' SKS<span class="dot-sep">·</span>' +
+      esc(CATEGORIES[a.category] || 'Aktivitas') +
+      (a.code ? '<span class="dot-sep">·</span>' + esc(a.code) : '') + '</span>' +
+      '</div><span class="badge badge-' + (a.tone || 'muted') + '">' + esc(a.status) + '</span></div>';
+
+    var meta = metaItem('Topik', a.topic) + metaItem('Pembimbing', a.supervisor) +
+      metaItem('Jadwal', a.session ? sessionLabel(a.session) : null);
+    if (a.session) meta += metaItem('Ruangan', a.session.room);
+    if (a.classGroup) meta += metaItem('Kelas', a.classGroup);
+    meta += metaItem('Progres', a.progress);
+
+    html += '<div class="meta-grid">' + meta + '</div>';
+
+    if (a.note) html += '<p class="activity-note">' + esc(a.note) + '</p>';
+    return html + '</article>';
+  }
+
+  function renderAktivitas() {
+    var groups = [
+      { key: 'non-perkuliahan', title: 'Akademik Non-Perkuliahan', hint: 'Kegiatan akademik berbobot SKS di luar perkuliahan reguler. Sebagian sudah punya slot mingguan tetap, sebagian belum dijadwalkan.' },
+      { key: 'formalitas', title: 'Formalitas / Administratif', hint: 'Komponen SKS yang pelaksanaannya sudah selesai atau bersifat administratif.' }
+    ];
+
+    var html = '<header class="greeting"><h1>Aktivitas Akademik</h1>' +
+      '<p class="greeting-meta"><span>' + LOAD.extra + ' SKS di luar perkuliahan terjadwal · ' +
+      ACTIVITIES.length + ' kegiatan</span></p></header>';
+
+    if (!ACTIVITIES.length) {
+      return html + emptyState('Belum ada aktivitas', 'Tambahkan entri pada academicActivities di data.js.');
+    }
+
+    html += '<div class="stack">';
+    groups.forEach(function (g) {
+      var list = ACTIVITIES.filter(function (a) { return a.group === g.key; });
+      if (!list.length) return;
+      html += '<section aria-label="' + esc(g.title) + '">' +
+        '<div class="section-head"><h2>' + esc(g.title) + '</h2>' +
+        '<span class="count">' + list.reduce(function (s, a) { return s + a.sks; }, 0) + ' SKS</span></div>' +
+        '<p class="section-hint">' + esc(g.hint) + '</p>' +
+        '<div class="activity-grid">' + list.map(activityCard).join('') + '</div>' +
+        '</section>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  /* ==========================================================================
+     10. VIEW: BIMBINGAN
+     ======================================================================== */
+
+  function guidanceCard(g) {
+    return '<article class="guidance-card">' +
+      '<div class="guidance-head"><div>' +
+      '<p class="guidance-kicker">' + icon('mentor') +
+      '<span class="section-label">Bimbingan ' + esc(g.type) + '</span></p>' +
+      '<h3 class="guidance-title">' + esc(g.topic || EMPTY) + '</h3>' +
+      '</div><span class="badge badge-' + (g.tone || 'warning') + '">' + esc(g.status) + '</span></div>' +
+      '<div class="meta-grid">' +
+      metaItem('Pembimbing', g.supervisor) +
+      metaItem('Waktu', g.time) +
+      metaItem('Tempat', g.place) +
+      metaItem('Jenis', g.type) +
+      '</div>' +
+      (g.note ? '<p class="activity-note">' + esc(g.note) + '</p>' : '') +
+      '</article>';
+  }
+
+  function renderBimbingan() {
+    var html = '<header class="greeting"><h1>Bimbingan Akademik</h1>' +
+      '<p class="greeting-meta"><span>Bimbingan bukan kelas reguler — waktunya menyesuaikan kesepakatan dengan pembimbing.</span></p></header>';
+
+    html += '<div class="stack">';
+
+    html += '<section aria-label="Daftar bimbingan">' +
+      '<div class="section-head"><h2>Bimbingan Berjalan</h2>' +
+      '<span class="count">' + GUIDANCE.length + ' entri</span></div>' +
+      (GUIDANCE.length
+        ? '<div class="guidance-grid">' + GUIDANCE.map(guidanceCard).join('') + '</div>'
+        : emptyState('Belum ada jadwal bimbingan',
+          'Belum ada bimbingan yang tercatat. Tambahkan entri pada guidanceData di data.js setelah jadwal disepakati.'));
+    html += '</section>';
+
+    /* Kegiatan yang masih menunggu penjadwalan — diturunkan dari data aktivitas */
+    var waiting = ACTIVITIES.filter(function (a) { return !a.session && a.group === 'non-perkuliahan'; });
+    if (waiting.length) {
+      html += '<section aria-label="Menunggu penjadwalan">' +
+        '<div class="section-head"><h2>Menunggu Penjadwalan</h2>' +
+        '<span class="count">' + waiting.length + ' kegiatan</span></div>' +
+        '<div class="card"><ul class="schedule-list">' +
+        waiting.map(function (a) {
+          return '<li class="pending-row">' +
+            '<span class="row-body"><span class="row-title">' + esc(a.name) + '</span>' +
+            '<span class="row-meta">' + a.sks + ' SKS<span class="dot-sep">·</span>' +
+            (a.supervisor ? esc(a.supervisor) : 'Pembimbing ' + EMPTY.toLowerCase()) + '</span></span>' +
+            '<span class="badge badge-' + (a.tone || 'muted') + '">' + esc(a.status) + '</span></li>';
+        }).join('') +
+        '</ul></div></section>';
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  /* ==========================================================================
+     11. VIEW: PENCARIAN
+     ======================================================================== */
+
+  function renderSearch(query) {
+    var results = runSearch(query);
+    var html = '<header class="search-head"><h1>Hasil Pencarian</h1>' +
+      '<p>' + results.length + ' hasil untuk <span class="query">"' + esc(query.trim()) + '"</span></p></header>';
+
+    if (!results.length) {
+      return html + emptyState('Tidak ada hasil',
+        'Coba kata kunci lain — nama mata kuliah, nama dosen, ruangan, topik, atau jenis kegiatan.');
+    }
+
+    html += '<div class="result-list">' + results.map(function (r) {
+      return '<article class="card result-item">' +
+        '<span style="color:var(--text-subtle);margin-top:2px">' + icon(r.icon) + '</span>' +
+        '<div class="result-body">' +
+        '<p class="result-title">' + highlight(r.title, query) + '</p>' +
+        '<p class="row-meta">' + highlight(r.meta, query) + '</p>' +
+        '</div>' +
+        '<span class="badge badge-plain badge-muted">' + esc(r.categoryLabel) + '</span>' +
+        '</article>';
+    }).join('') + '</div>';
+
+    return html;
+  }
+
+  /* ==========================================================================
+     12. ROUTER & RENDER
+     ======================================================================== */
+
+  var VIEWS = [
+    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+    { id: 'jadwal', label: 'Jadwal', icon: 'calendar' },
+    { id: 'aktivitas', label: 'Aktivitas', icon: 'book' },
+    { id: 'bimbingan', label: 'Bimbingan', icon: 'mentor' }
+  ];
+
+  var dom = {};
+  var currentView = 'dashboard';
+  var viewBeforeSearch = 'dashboard';
+  var searchQuery = '';
+  var lastSignature = '';
+  var lastLiveId = null;
+  var timer = null;
+
+  function renderCurrent() {
+    var now = new Date();
+    try {
+      if (currentView === 'search') {
+        dom.views.search.innerHTML = renderSearch(searchQuery);
+      } else if (currentView === 'dashboard') {
+        dom.views.dashboard.innerHTML = renderDashboard(now);
+      } else if (currentView === 'jadwal') {
+        dom.views.jadwal.innerHTML = renderJadwal(now);
+      } else if (currentView === 'aktivitas') {
+        dom.views.aktivitas.innerHTML = renderAktivitas();
+      } else if (currentView === 'bimbingan') {
+        dom.views.bimbingan.innerHTML = renderBimbingan();
+      }
+    } catch (err) {
+      console.error('Gagal merender tampilan:', err);
+      dom.views[currentView].innerHTML = emptyState('Terjadi kesalahan',
+        'Tampilan tidak dapat dimuat. Periksa struktur data pada data.js.');
+    }
+  }
+
+  function setView(name, opts) {
+    if (!dom.views[name]) return;
+    currentView = name;
+
+    Object.keys(dom.views).forEach(function (key) {
+      dom.views[key].hidden = key !== name;
+    });
+
+    Array.prototype.forEach.call(dom.tabs.querySelectorAll('.tab'), function (tab) {
+      var active = tab.dataset.view === name;
+      if (active) tab.setAttribute('aria-current', 'page');
+      else tab.removeAttribute('aria-current');
+    });
+
+    renderCurrent();
+
+    /* Jalankan ulang animasi masuk agar perpindahan tampilan terasa disengaja */
+    var el = dom.views[name];
+    el.classList.remove('is-entering');
+    void el.offsetWidth;
+    el.classList.add('is-entering');
+
+    if (opts && opts.focus) {
+      dom.main.focus({ preventScroll: true });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
+  /* ==========================================================================
+     13. MESIN REALTIME
+     ======================================================================== */
+
+  function signature(now) {
+    var live = liveClass(now);
+    var next = nextClass(now);
+    return [
+      now.getDay(),
+      greetingBucket(now.getHours()),
+      live ? live.id : '-',
+      next ? next.cls.id : '-',
+      SESSIONS.map(function (c) { return statusOf(c, now); }).join(',')
+    ].join('|');
+  }
+
+  function tick() {
+    var now = new Date();
+
+    /* Jam pada sapaan */
+    var clockEl = document.getElementById('live-clock');
+    if (clockEl) {
+      clockEl.textContent = pad(now.getHours()) + '.' + pad(now.getMinutes()) + '.' + pad(now.getSeconds());
+    }
+
+    /* Countdown + progress kelas berjalan */
+    var cdEl = document.getElementById('countdown-value');
+    if (cdEl) {
+      var live = liveClass(now);
+      var next = nextClass(now);
+      if (live || next) {
+        var target = live ? occurrenceEnd(live, now) : next.at;
+        var cd = formatCountdown(target - now);
+        if (cdEl.textContent !== cd.text) cdEl.textContent = cd.text;
+        cdEl.classList.toggle('is-words', cd.words);
+      }
+      var fill = document.getElementById('progress-fill');
+      if (fill && live) {
+        var s = occurrenceStart(live, now);
+        var e = occurrenceEnd(live, now);
+        fill.style.width = Math.min(100, Math.max(0, ((now - s) / (e - s)) * 100)).toFixed(2) + '%';
+      }
+    }
+
+    /* Render ulang hanya bila status berubah */
+    var sig = signature(now);
+    if (sig !== lastSignature) {
+      lastSignature = sig;
+      if (currentView !== 'search') renderCurrent();
+
+      var live2 = liveClass(now);
+      var liveId = live2 ? live2.id : null;
+      if (liveId !== lastLiveId) {
+        lastLiveId = liveId;
+        if (dom.liveRegion) {
+          dom.liveRegion.textContent = live2
+            ? live2.name + ' sedang berlangsung sampai pukul ' + clock(live2.end) + '.'
+            : 'Tidak ada kelas yang sedang berlangsung.';
+        }
+      }
+    }
+  }
+
+  function startTimer() {
+    if (timer !== null) return;
+    timer = window.setInterval(tick, 1000);
+  }
+
+  function stopTimer() {
+    if (timer === null) return;
+    window.clearInterval(timer);
+    timer = null;
+  }
+
+  /* ==========================================================================
+     14. TEMA
+     ======================================================================== */
+
+  function currentTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  }
+
+  function applyTheme(theme, persist) {
+    document.documentElement.setAttribute('data-theme', theme);
+    dom.themeToggle.setAttribute('aria-label',
+      theme === 'dark' ? 'Aktifkan tema terang' : 'Aktifkan tema gelap');
+    if (persist) {
+      try { localStorage.setItem('s7os.theme', theme); } catch (e) {}
+    }
+  }
+
+  function initTheme() {
+    var stored = null;
+    try { stored = localStorage.getItem('s7os.theme'); } catch (e) {}
+    applyTheme(stored || currentTheme(), false);
+
+    /* Ikuti preferensi sistem selama pengguna belum memilih sendiri */
+    if (!stored && window.matchMedia) {
+      var mq = window.matchMedia('(prefers-color-scheme: dark)');
+      var onChange = function (ev) {
+        var saved = null;
+        try { saved = localStorage.getItem('s7os.theme'); } catch (e) {}
+        if (!saved) applyTheme(ev.matches ? 'dark' : 'light', false);
+      };
+      if (mq.addEventListener) mq.addEventListener('change', onChange);
+      else if (mq.addListener) mq.addListener(onChange);
+    }
+  }
+
+  /* ==========================================================================
+     15. PENCARIAN — UI
+     ======================================================================== */
+
+  function syncSearchAffordances() {
+    var hasText = dom.searchInput.value.length > 0;
+    dom.searchClear.hidden = !hasText;
+    if (dom.searchKbd) dom.searchKbd.style.opacity = hasText ? '0' : '';
+  }
+
+  function handleSearchInput() {
+    searchQuery = dom.searchInput.value;
+    syncSearchAffordances();
+
+    if (searchQuery.trim().length > 0) {
+      if (currentView !== 'search') viewBeforeSearch = currentView;
+      setView('search');
+    } else if (currentView === 'search') {
+      setView(viewBeforeSearch);
+    }
+  }
+
+  /** Bersihkan field tanpa memindahkan tampilan. */
+  function resetSearchField() {
+    dom.searchInput.value = '';
+    searchQuery = '';
+    syncSearchAffordances();
+  }
+
+  function clearSearch(refocus) {
+    var wasSearching = currentView === 'search';
+    resetSearchField();
+    if (wasSearching) setView(viewBeforeSearch);
+    if (refocus) dom.searchInput.focus();
+  }
+
+  /* ==========================================================================
+     16. INISIALISASI
+     ======================================================================== */
+
+  function fillProfile() {
+    dom.initials.textContent = PROFILE.initials || '';
+    dom.name.textContent = PROFILE.name || '';
+    dom.meta.textContent = [
+      PROFILE.nim, PROFILE.program, 'Semester ' + PROFILE.semester, PROFILE.academicYear
+    ].join(' · ');
+    dom.footerIdentity.textContent = PROFILE.name + ' · ' + PROFILE.nim + ' · ' +
+      PROFILE.program + ' · Semester ' + PROFILE.semester + ' · ' + PROFILE.academicYear;
+    document.title = PROFILE.name + ' · Semester ' + PROFILE.semester;
+  }
+
+  function buildTabs() {
+    dom.tabs.innerHTML = VIEWS.map(function (v) {
+      return '<button type="button" class="tab" data-view="' + v.id + '"' +
+        (v.id === 'dashboard' ? ' aria-current="page"' : '') + '>' +
+        icon(v.icon) + '<span>' + esc(v.label) + '</span></button>';
+    }).join('');
+  }
+
+  function bindEvents() {
+    dom.tabs.addEventListener('click', function (ev) {
+      var tab = ev.target.closest('.tab');
+      if (!tab) return;
+      resetSearchField();
+      viewBeforeSearch = tab.dataset.view;
+      setView(tab.dataset.view, { focus: true });
+    });
+
+    dom.main.addEventListener('click', function (ev) {
+      var quick = ev.target.closest('[data-quick]');
+      if (quick) {
+        var target = quick.dataset.quick;
+        if (target === 'today') {
+          var section = document.getElementById('today-section');
+          if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+          setView(target, { focus: true });
+        }
+        return;
+      }
+
+      var chipEl = ev.target.closest('[data-filter]');
+      if (chipEl) {
+        var group = chipEl.dataset.filter;
+        var val = chipEl.dataset.value;
+        filters[group] = val;
+        renderCurrent();
+        /* Kembalikan fokus ke chip yang sama setelah render ulang */
+        var again = dom.views[currentView].querySelector(
+          '[data-filter="' + group + '"][data-value="' + val + '"]');
+        if (again) again.focus();
+      }
+    });
+
+    dom.themeToggle.addEventListener('click', function () {
+      applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', true);
+    });
+
+    dom.searchInput.addEventListener('input', handleSearchInput);
+    dom.searchInput.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') { ev.preventDefault(); clearSearch(true); }
+    });
+    dom.searchClear.addEventListener('click', function () { clearSearch(true); });
+
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key !== '/' || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      var tag = (document.activeElement && document.activeElement.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      ev.preventDefault();
+      dom.searchInput.focus();
+      dom.searchInput.select();
+    });
+
+    /* Hemat sumber daya saat tab tidak terlihat — mencegah timer menumpuk */
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) {
+        stopTimer();
+      } else {
+        tick();
+        startTimer();
+      }
+    });
+
+    window.addEventListener('pagehide', stopTimer);
+  }
+
+  function init() {
+    dom = {
+      tabs: document.getElementById('tabs'),
+      main: document.getElementById('main'),
+      initials: document.getElementById('profile-initials'),
+      name: document.getElementById('profile-name'),
+      meta: document.getElementById('profile-meta'),
+      footerIdentity: document.getElementById('footer-identity'),
+      themeToggle: document.getElementById('theme-toggle'),
+      searchInput: document.getElementById('search-input'),
+      searchClear: document.getElementById('search-clear'),
+      searchKbd: document.querySelector('.search-kbd'),
+      liveRegion: document.getElementById('live-region'),
+      views: {
+        dashboard: document.getElementById('view-dashboard'),
+        jadwal: document.getElementById('view-jadwal'),
+        aktivitas: document.getElementById('view-aktivitas'),
+        bimbingan: document.getElementById('view-bimbingan'),
+        search: document.getElementById('view-search')
+      }
+    };
+
+    initTheme();
+    fillProfile();
+    buildTabs();
+    bindEvents();
+
+    lastSignature = signature(new Date());
+    var live = liveClass(new Date());
+    lastLiveId = live ? live.id : null;
+
+    setView('dashboard');
+    startTimer();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();

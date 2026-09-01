@@ -1,0 +1,169 @@
+# Semester 7 Academic OS
+
+Dashboard akademik pribadi untuk Restu Mandiri (1237010016 · Matematika · Semester 7 · 2026/2027).
+
+HTML + CSS + JavaScript murni. Tanpa build step, tanpa dependensi, tanpa koneksi internet.
+
+## Menjalankan
+
+Klik dua kali `index.html`. Selesai.
+
+Semua file dimuat sebagai `<script src>` dan `<link>` biasa (bukan ES module), jadi
+aplikasi berjalan penuh lewat `file://` tanpa perlu server.
+
+Satu catatan kecil: pilihan tema disimpan di `localStorage`. Chrome dan Firefox
+mengizinkannya untuk file lokal, Safari tidak. Kalau browsermu memblokirnya,
+aplikasi tetap berjalan normal — temanya hanya kembali mengikuti tema sistem
+setiap kali dibuka.
+
+## Struktur
+
+```
+index.html   kerangka halaman (header, navigasi, kontainer tampilan)
+style.css    design token + seluruh style
+data.js      SATU-SATUNYA sumber data akademik  ← file yang biasanya kamu ubah
+script.js    logika: turunan data, render, mesin realtime, filter, pencarian, tema
+```
+
+Ringkasan SKS, jadwal hari ini, kelas berikutnya, status, pencarian, dan filter
+semuanya dihitung dari `data.js`. Tidak ada angka akademik yang ditulis ulang di
+`index.html` maupun `script.js`.
+
+## Mengubah data
+
+Semua di `data.js`.
+
+### Data pribadi — `profileData`
+
+```js
+const profileData = {
+  name: 'Restu Mandiri',
+  initials: 'RM',        // dipakai untuk avatar
+  nim: '1237010016',
+  program: 'Matematika',
+  semester: 7,
+  academicYear: '2026/2027',
+};
+```
+
+### Jadwal kuliah — `scheduleData`
+
+Tambah atau ubah objek di dalam array:
+
+```js
+{
+  id: 'nama-unik',            // bebas, asal tidak kembar
+  name: 'Nama Mata Kuliah',
+  day: 1,                     // 1=Senin 2=Selasa 3=Rabu 4=Kamis 5=Jumat 6=Sabtu
+  start: '09:30',             // format 24 jam, WAJIB 'HH:MM'
+  end: '12:00',
+  sks: 3,
+  room: '302',
+  lecturer: 'Ibu Asti',
+  kind: 'Perkuliahan Reguler',
+  category: 'perkuliahan',
+}
+```
+
+Total SKS kuliah, jumlah kelas per hari, status, dan countdown ikut menyesuaikan sendiri.
+
+### Aktivitas akademik — `academicActivities`
+
+```js
+{
+  id: 'studi-literatur',
+  name: 'Studi Literatur',
+  code: '70101024',
+  sks: 2,
+  category: 'studi-literatur',   // kunci dari categoryLabels
+  group: 'non-perkuliahan',      // atau 'formalitas'
+  status: 'Berjalan',
+  tone: 'success',               // success | warning | neutral | muted
+  topic: 'Studi Literatur Keuangan',
+  supervisor: 'Fahrudin Muhtarulloh, S.Si., M.Sc.',
+  classGroup: 'J',
+  session: {                     // null bila belum punya hari/jam tetap
+    day: 6, start: '10:20', end: '12:00',
+    room: 'Lab MIK',
+    lecturer: 'Fahrudin Muhtarulloh, S.Si., M.Sc.',
+  },
+  progress: null,
+  deadline: null,
+  note: null,
+}
+```
+
+**`session` adalah kuncinya.** Aktivitas yang punya `session` ikut muncul di
+jadwal mingguan, jadwal hari ini, dan hitung mundur kelas berikutnya — persis
+seperti mata kuliah. Yang `session`-nya `null` masuk ke bagian "Tanpa Jadwal
+Tetap". Begitu Seminar Studi Literatur dapat jadwal, cukup isi `session`-nya dan
+seminar otomatis muncul di semua tampilan.
+
+SKS aktivitas tetap dihitung sebagai **beban tambahan**, bukan perkuliahan
+reguler — jadi pemisahan 15 / 7 / 22 SKS tidak berubah walau aktivitasnya
+terjadwal.
+
+Isi `null` pada field yang belum diketahui — aplikasi menampilkannya sebagai
+**Belum ditentukan**, bukan mengarang isi.
+
+### Bimbingan — `guidanceData`
+
+Tambahkan entri baru setiap kali ada jadwal bimbingan yang disepakati:
+
+```js
+{
+  id: 'bimbingan-2',
+  type: 'Studi Literatur',
+  topic: 'Studi Literatur Keuangan',
+  supervisor: 'Pak Rudi',
+  status: 'Terjadwal',
+  tone: 'success',
+  time: 'Rabu, 10.00',
+  place: 'Ruang Dosen',
+  category: 'bimbingan',
+  note: null,
+}
+```
+
+### Progress semester — `semesterConfig`
+
+Sudah terisi dari Kalender Akademik Ganjil 2026/2027:
+
+```js
+const semesterConfig = {
+  semester: 7,
+  academicYear: '2026/2027',
+  startDate: '2026-08-31',   // awal kuliah
+  endDate: '2026-12-31',     // hari terakhir UAS
+};
+```
+
+Kalau keduanya dikosongkan (`null`), kartu Progress Semester otomatis kembali
+menampilkan pesan "belum dikonfigurasi" — tidak error.
+
+### Agenda akademik — `academicCalendar`
+
+Daftar tanggal penting yang tampil di kartu Progress Semester. Tanda
+"N hari lagi" otomatis menempel pada agenda terdekat yang belum lewat, dan
+agenda yang sedang berjalan ditandai "Berlangsung".
+
+```js
+{ id: 'uts', name: 'UTS', start: '2026-10-19', end: '2026-10-23' }
+```
+
+Untuk agenda satu hari, isi `start` dan `end` dengan tanggal yang sama.
+
+## Pintasan
+
+| Tombol | Fungsi |
+| --- | --- |
+| `/` | Fokus ke kolom pencarian |
+| `Esc` | Bersihkan pencarian dan kembali ke tampilan sebelumnya |
+| `Tab` | Navigasi keyboard penuh dengan focus ring yang terlihat |
+
+## Catatan teknis
+
+- Tema mengikuti preferensi sistem sampai kamu memilih sendiri; pilihan disimpan di `localStorage`.
+- Satu `setInterval` untuk seluruh aplikasi, otomatis berhenti saat tab tidak terlihat.
+- Render ulang hanya terjadi saat status jadwal berubah, bukan tiap detik.
+- Semua warna teks memenuhi kontras WCAG AA pada mode terang maupun gelap.
