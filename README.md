@@ -252,6 +252,33 @@ tanpa perlu mengubah kode.
 "Medkraft", sedangkan pengumuman resmi menulis "Medkraf". Data mengikuti
 pengumuman resmi.
 
+### Susunan kepanitiaan — `mathfestTeam`, `mathfestDivisionHeads`
+
+```js
+const mathfestTeam = [
+  { name: 'Risa Namira Sundari', batch: '2023', role: 'Penanggung Jawab' },
+  { name: 'Restu Mandiri', batch: '2023', role: 'Anggota' },
+];
+
+const mathfestDivisionHeads = [
+  { id: 'acara', name: 'Divisi Acara', head: 'Muhamad Dafo Saprudin', batch: '2023' },
+];
+```
+
+Ruang lingkupnya sengaja dibatasi: **anggota divisi sendiri dicatat lengkap,
+divisi lain hanya penanggung jawabnya.** Nama anggota divisi lain tidak
+disimpan karena repositori dan situs ini bersifat publik, sedangkan poster
+pengumuman hanya beredar di lingkup himpunan.
+
+Baris yang namanya sama dengan `profileData.name` otomatis ditandai "kamu" —
+tidak perlu penanda khusus di data.
+
+Kedua daftar ini **tidak diambil dari Google Sheets**, karena susunan panitia
+tidak berubah sepanjang acara. Ubah langsung di `data.js` bila perlu.
+
+Nama panitia juga masuk indeks pencarian, jadi menekan `/` lalu mengetik nama
+akan menemukan orangnya beserta divisi dan angkatannya.
+
 Tiap agenda:
 
 ```js

@@ -22,6 +22,8 @@
   var MATHFEST = { name: null, organization: null, role: null, division: null };
   var MF_PHASES = [];
   var MF_ITEMS = [];
+  var MF_HEADS = [];
+  var MF_TEAM = [];
 
   /* --------------------------------------------------------------------------
      SESSIONS = semua kegiatan yang punya slot mingguan tetap.
@@ -64,6 +66,8 @@
     CALENDAR = Array.isArray(d.calendar) ? d.calendar.slice() : [];
     MF_PHASES = Array.isArray(d.mathfestPhases) ? d.mathfestPhases.slice() : [];
     MF_ITEMS = Array.isArray(d.mathfestTimeline) ? d.mathfestTimeline.slice() : [];
+    MF_HEADS = Array.isArray(d.mathfestDivisionHeads) ? d.mathfestDivisionHeads.slice() : [];
+    MF_TEAM = Array.isArray(d.mathfestTeam) ? d.mathfestTeam.slice() : [];
     CATEGORIES = Object.assign({}, d.categories || {});
 
     CLASSES.sort(function (a, b) {
@@ -429,6 +433,30 @@
         terms: [m.agenda, m.sub, m.pj, m.needs, m.place, m.when,
           MATHFEST.name, MATHFEST.organization, 'mathfest', 'kepanitiaan', 'panitia', 'timeline',
           mfIsMine(m) ? MATHFEST.role : null]
+      });
+    });
+
+    /* Nama panitia ikut terindeks supaya "siapa Risa?" bisa dijawab lewat
+       pencarian, bukan dengan membuka PDF pengumuman. */
+    MF_TEAM.forEach(function (p) {
+      items.push({
+        kind: 'panitia', ref: p, icon: 'user',
+        title: p.name,
+        categoryLabel: MATHFEST.role || 'Kepanitiaan',
+        category: 'panitia',
+        meta: [p.role, p.batch, MATHFEST.role, MATHFEST.name].filter(Boolean).join(' · '),
+        terms: [p.name, p.role, p.batch, MATHFEST.role, MATHFEST.name, 'panitia', 'divisi', 'tim']
+      });
+    });
+
+    MF_HEADS.forEach(function (h) {
+      items.push({
+        kind: 'panitia', ref: h, icon: 'user',
+        title: h.head,
+        categoryLabel: 'Penanggung Jawab Divisi',
+        category: 'panitia',
+        meta: [h.name, h.batch, MATHFEST.name].filter(Boolean).join(' · '),
+        terms: [h.head, h.name, h.id, h.batch, 'penanggung jawab', 'pj', 'panitia', 'divisi']
       });
     });
 
@@ -1098,6 +1126,53 @@
       '<span class="label">' + esc(label) + '</span></div>';
   }
 
+  function sameName(a, b) {
+    return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+  }
+
+  function rosterRow(name, sub, trailing, highlight, youTag) {
+    return '<li class="roster-row"' + (highlight ? ' data-me="true"' : '') + '>' +
+      '<span class="roster-main">' +
+      '<span class="roster-name">' + esc(name) +
+      (youTag ? '<span class="roster-you">kamu</span>' : '') + '</span>' +
+      (sub ? '<span class="roster-sub">' + esc(sub) + '</span>' : '') +
+      '</span>' +
+      (trailing ? '<span class="roster-batch">' + esc(trailing) + '</span>' : '') +
+      '</li>';
+  }
+
+  /* Anggota divisi sendiri — satu-satunya daftar nama lengkap yang disimpan. */
+  function mfTeamCard() {
+    if (!MF_TEAM.length) return '';
+
+    return '<section class="card card-pad" aria-labelledby="mf-team-heading">' +
+      '<div class="section-head"><h2 id="mf-team-heading">Tim ' +
+      esc(MATHFEST.role || 'Divisi') + '</h2>' +
+      '<span class="count">' + MF_TEAM.length + ' orang</span></div>' +
+      '<ul class="roster">' +
+      MF_TEAM.map(function (p) {
+        var me = sameName(p.name, PROFILE.name);
+        var isHead = /penanggung jawab/i.test(p.role || '');
+        return rosterRow(p.name, isHead ? p.role : null, p.batch, me || isHead, me);
+      }).join('') +
+      '</ul></section>';
+  }
+
+  /* Divisi lain hanya dicatat penanggung jawabnya, supaya kolom "penanggung
+     jawab" pada timeline bisa dibaca sebagai orang, bukan sekadar singkatan. */
+  function mfHeadsCard() {
+    if (!MF_HEADS.length) return '';
+
+    return '<section class="card card-pad" aria-labelledby="mf-heads-heading">' +
+      '<div class="section-head"><h2 id="mf-heads-heading">Penanggung Jawab Divisi</h2>' +
+      '<span class="count">' + MF_HEADS.length + ' divisi</span></div>' +
+      '<ul class="roster">' +
+      MF_HEADS.map(function (h) {
+        return rosterRow(h.head, h.name, h.batch, h.id === MATHFEST.division, false);
+      }).join('') +
+      '</ul></section>';
+  }
+
   function mfDayTag(item, now) {
     var st = mfStatus(item, now);
     if (st === 'live') return '<span class="badge badge-success badge-live">Berjalan</span>';
@@ -1297,6 +1372,9 @@
           '</div>'
         : '') +
       '</section>';
+
+    html += mfTeamCard();
+    html += mfHeadsCard();
     html += '</div></div>';
 
     /* Filter */
@@ -1949,7 +2027,9 @@
           categories: read(function () { return categoryLabels; }, {}),
           mathfestConfig: read(function () { return mathfestConfig; }, {}),
           mathfestPhases: read(function () { return mathfestPhases; }, []),
-          mathfestTimeline: read(function () { return mathfestTimeline; }, [])
+          mathfestTimeline: read(function () { return mathfestTimeline; }, []),
+          mathfestDivisionHeads: read(function () { return mathfestDivisionHeads; }, []),
+          mathfestTeam: read(function () { return mathfestTeam; }, [])
         },
         source: 'lokal',
         notes: ['sheets.js tidak dimuat — memakai data lokal.']

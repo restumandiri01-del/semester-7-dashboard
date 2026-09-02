@@ -386,7 +386,12 @@
       categories: pick(function () { return categoryLabels; }, {}),
       mathfestConfig: pick(function () { return mathfestConfig; }, {}),
       mathfestPhases: pick(function () { return mathfestPhases; }, []),
-      mathfestTimeline: pick(function () { return mathfestTimeline; }, [])
+      mathfestTimeline: pick(function () { return mathfestTimeline; }, []),
+
+      /* Susunan kepanitiaan statis sepanjang acara, jadi tidak punya tab
+         sendiri di spreadsheet — selalu dibaca dari data.js. */
+      mathfestDivisionHeads: pick(function () { return mathfestDivisionHeads; }, []),
+      mathfestTeam: pick(function () { return mathfestTeam; }, [])
     };
   }
 
@@ -441,7 +446,9 @@
       categories: local.categories,
       mathfestConfig: local.mathfestConfig,
       mathfestPhases: local.mathfestPhases,
-      mathfestTimeline: local.mathfestTimeline
+      mathfestTimeline: local.mathfestTimeline,
+      mathfestDivisionHeads: local.mathfestDivisionHeads,
+      mathfestTeam: local.mathfestTeam
     };
 
     function finishLocal(reason) {
@@ -491,7 +498,9 @@
         categories: fallback.categories,
         mathfestConfig: fallback.mathfestConfig,
         mathfestPhases: fallback.mathfestPhases,
-        mathfestTimeline: fallback.mathfestTimeline
+        mathfestTimeline: fallback.mathfestTimeline,
+        mathfestDivisionHeads: fallback.mathfestDivisionHeads,
+        mathfestTeam: fallback.mathfestTeam
       };
 
       var ok = 0;

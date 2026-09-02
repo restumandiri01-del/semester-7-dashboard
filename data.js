@@ -264,6 +264,44 @@ const mathfestConfig = {
   generalHead: 'Regana Fikri Adiba',       // Penanggung Jawab Umum
 };
 
+/* ----------------------------------------------------------------------------
+   7b. Susunan kepanitiaan
+   ----------------------------------------------------------------------------
+   Sumber: "Pengumuman Divisi Panitia Mathfest 2026".
+
+   Sengaja dibatasi: anggota divisi sendiri dicatat lengkap, sedangkan divisi
+   lain hanya penanggung jawabnya. Nama anggota divisi lain tidak disimpan di
+   sini karena repositori dan situs ini bersifat publik.
+
+   Data ini statis sepanjang kepanitiaan, jadi tetap dikelola di berkas ini dan
+   tidak ikut diambil dari Google Sheets.
+   -------------------------------------------------------------------------- */
+const mathfestDivisionHeads = [
+  { id: 'acara', name: 'Divisi Acara', head: 'Muhamad Dafo Saprudin', batch: '2023' },
+  { id: 'kompetisi', name: 'Divisi Kompetisi', head: 'Risa Namira Sundari', batch: '2023' },
+  { id: 'medkraf', name: 'Divisi Media Kreatif (Medkraf)', head: "Annisa Rihadatul'aisya Yendi M.", batch: '2023' },
+  { id: 'humas', name: 'Divisi Hubungan Masyarakat (Humas)', head: 'Syahdan Hikayat Adnan', batch: '2023' },
+  { id: 'daspro', name: 'Divisi Dana Usaha dan Sponsorship (Daspro)', head: "Lingga Khoirul Fikri Al'Arif", batch: '2023' },
+  { id: 'delog', name: 'Divisi Dekorasi dan Logistik (Delog)', head: 'Zefri Ramdani', batch: '2023' },
+  { id: 'k3', name: 'Divisi Konsumsi, Kesehatan, dan Keamanan (K3)', head: 'Anabila Dwi Rohmah', batch: '2023' },
+];
+
+/* Anggota Divisi Kompetisi, urut sesuai pengumuman. */
+const mathfestTeam = [
+  { name: 'Risa Namira Sundari', batch: '2023', role: 'Penanggung Jawab' },
+  { name: 'Aisyah Salma Nabila', batch: '2024 B', role: 'Anggota' },
+  { name: 'Farah Rizqika Maulidinia', batch: '2024 A', role: 'Anggota' },
+  { name: 'Gina Nuroniah', batch: '2023', role: 'Anggota' },
+  { name: 'Lisfa Nurlatifa', batch: '2023', role: 'Anggota' },
+  { name: 'Marla Alisyami', batch: '2025 A', role: 'Anggota' },
+  { name: 'Muhammad Rifqi Ramdhani', batch: '2025 B', role: 'Anggota' },
+  { name: 'Najwa Awaliya Azzahra', batch: '2023', role: 'Anggota' },
+  { name: 'Rameyza Elya', batch: '2025 B', role: 'Anggota' },
+  { name: 'Restu Mandiri', batch: '2023', role: 'Anggota' },
+  { name: 'Ricka S Mulyana', batch: '2023', role: 'Anggota' },
+  { name: 'Yasmin Cholilah Royana', batch: '2024 A', role: 'Anggota' },
+];
+
 const mathfestPhases = [
   { id: 'juni', label: 'Juni 2026' },
   { id: 'juli-agustus', label: 'Juli – Agustus 2026' },
