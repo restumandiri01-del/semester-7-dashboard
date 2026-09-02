@@ -114,13 +114,18 @@
   <footer class="app-footer">
     <div class="shell footer-inner">
       <span id="footer-identity"></span>
-      <span class="footer-note">Data akademik dikelola di <code>data.js</code></span>
+      <span class="footer-note" id="footer-source">Menyiapkan data…</span>
     </div>
   </footer>
 
   <p class="sr-only" id="live-region" aria-live="polite"></p>
 
+  <!-- Urutan penting:
+       data.js   menyediakan data cadangan sebagai variabel global
+       sheets.js membaca cadangan itu, lalu mencoba Google Sheets
+       script.js merender setelah sumber data selesai dimuat -->
   <script src="data.js"></script>
+  <script src="sheets.js"></script>
   <script src="script.js" defer></script>
 </body>
 </html>

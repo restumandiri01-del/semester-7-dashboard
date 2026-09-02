@@ -90,6 +90,13 @@
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo,
     Consolas, monospace;
 
+  /* Angka dan jam.
+     Dulu memakai --font-mono, dan itu membuat dashboard terasa seperti editor
+     kode. Sekarang memakai font teks yang sama; kelurusan digit tetap terjaga
+     karena setiap pemakainya menyertakan font-variant-numeric: tabular-nums.
+     Monospace kini hanya untuk hal yang memang mono: <code> dan tuts "/". */
+  --font-numeric: var(--font-sans);
+
   /* Ritme spasi — kelipatan 4 */
   --space-1: 4px;
   --space-2: 8px;
@@ -862,7 +869,7 @@ main:focus { outline: none; }
    Warnanya --text-muted (bukan --text-subtle): di atas gradien hero,
    --text-subtle hanya mencapai ~3.7-4.5:1 dan tidak lolos AA. */
 .greeting-clock {
-  font-family: var(--font-mono);
+  font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
   font-size: 0.8125rem;
   color: var(--text-muted);
@@ -932,7 +939,7 @@ main:focus { outline: none; }
   color: var(--text-muted);
 }
 .focus-sub .time {
-  font-family: var(--font-mono);
+  font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: var(--text);
@@ -952,7 +959,7 @@ main:focus { outline: none; }
 }
 .countdown-value {
   margin-top: 5px;
-  font-family: var(--font-mono);
+  font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
   font-size: 2.75rem;
   line-height: 1.02;
@@ -987,7 +994,8 @@ main:focus { outline: none; }
   display: flex;
   justify-content: space-between;
   margin-top: 7px;
-  font-family: var(--font-mono);
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
   font-size: 0.6875rem;
   color: var(--text-subtle);
 }
@@ -1025,7 +1033,7 @@ main:focus { outline: none; }
 .row-time {
   display: flex;
   flex-direction: column;
-  font-family: var(--font-mono);
+  font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
   font-size: 0.8125rem;
   line-height: 1.45;
@@ -1065,7 +1073,7 @@ main:focus { outline: none; }
 }
 .load-figure { display: flex; flex-direction: column; gap: 2px; }
 .load-figure .value {
-  font-family: var(--font-mono);
+  font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
   font-size: 1.75rem;
   line-height: 1.08;
@@ -1213,7 +1221,7 @@ main:focus { outline: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-mono);
+  font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
   font-size: 1.5rem;
   font-weight: 700;
@@ -1356,7 +1364,7 @@ main:focus { outline: none; }
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
-  font-family: var(--font-mono);
+  font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
   font-size: 0.78125rem;
   font-weight: 600;

@@ -25,9 +25,62 @@ setiap kali dibuka.
 ```
 index.html   kerangka halaman (header, navigasi, kontainer tampilan)
 style.css    design token + seluruh style
-data.js      SATU-SATUNYA sumber data akademik  ← file yang biasanya kamu ubah
+data.js      data cadangan — dipakai kalau Google Sheets tidak terjangkau
+sheets.js    ambil + urai CSV dari Google Sheets, dan logika cadangannya
 script.js    logika: turunan data, render, mesin realtime, filter, pencarian, tema
 ```
+
+## Dari mana datanya?
+
+Aplikasi mencoba Google Sheets lebih dulu, lalu jatuh ke `data.js` bila gagal.
+Kegagalan ditangani **per bagian**, jadi kalau hanya tab `jadwal` yang rusak,
+bagian lain tetap memakai data terbaru. Dashboard tidak pernah kosong.
+
+Sumber yang sedang dipakai selalu tertulis di footer, dan rincian kegagalannya
+dicetak ke konsol browser.
+
+### Menyiapkan Google Sheets
+
+Buat satu spreadsheet dengan **6 tab**. Baris pertama tiap tab wajib berisi nama
+kolom persis seperti berikut:
+
+| Tab | Kolom |
+| --- | --- |
+| `pengaturan` | `kunci`, `nilai` |
+| `jadwal` | `id`, `name`, `day`, `start`, `end`, `sks`, `room`, `lecturer`, `kind`, `category` |
+| `aktivitas` | `id`, `name`, `code`, `sks`, `category`, `group`, `status`, `tone`, `topic`, `supervisor`, `classgroup`, `progress`, `deadline`, `note`, `session_day`, `session_start`, `session_end`, `session_room`, `session_lecturer`, `session_formality` |
+| `bimbingan` | `id`, `type`, `topic`, `supervisor`, `status`, `tone`, `time`, `place`, `category`, `note` |
+| `kalender` | `id`, `name`, `start`, `end`, `critical` |
+| `mathfest` | `id`, `phase`, `agenda`, `sub`, `start`, `end`, `when`, `place`, `needs`, `pj`, `relevance` |
+
+Tab `pengaturan` memakai pasangan kunci/nilai, misalnya:
+
+```
+profil.name          Restu Mandiri
+profil.nim           1237010016
+semester.startDate   2026-08-31
+mathfest.role        Divisi Kompetisi
+kategori.perkuliahan Perkuliahan
+fase.september       September 2026
+```
+
+Lalu **File → Share → Publish to web**, pilih tiap tab, format **CSV**, dan
+salin tautannya ke `SHEET_CSV_URLS` di `sheets.js`.
+
+Selama tautannya masih `YOUR_GOOGLE_SHEETS_CSV_LINK_HERE`, aplikasi memakai
+`data.js` seperti biasa — jadi aman ditinggal dalam keadaan belum dikonfigurasi.
+
+### Yang perlu diketahui sebelum memakai Sheets
+
+- **Spreadsheet yang di-publish dapat dibaca siapa pun yang punya tautannya.**
+  Jangan memasukkan data yang tidak boleh dilihat orang lain.
+- **Membuka `index.html` dengan klik dua kali tetap bisa**, tetapi selalu
+  memakai `data.js`. Browser memblokir `fetch()` ke domain luar dari `file://`.
+  Data dari Sheets hanya terbaca lewat http/https, misalnya di Vercel.
+- **Tab yang kosong atau salah nama kolom diabaikan**, bukan menghapus data.
+  Ini mencegah dashboard mendadak kosong karena salah ketik satu nama kolom.
+- Perubahan di spreadsheet butuh beberapa menit untuk muncul, karena Google
+  menyimpan sementara hasil publikasinya.
 
 Ringkasan SKS, jadwal hari ini, kelas berikutnya, status, pencarian, dan filter
 semuanya dihitung dari `data.js`. Tidak ada angka akademik yang ditulis ulang di
@@ -237,7 +290,8 @@ jangan warna per komponen.
 | Aksi | Tinta teal `#0F766E` | Tenang dan fokus, cocok untuk alat belajar |
 | Sorotan | Stabilo oranye `#C2410C` | Dipakai hemat, hanya untuk hal mendesak dan penanda hari ini |
 | Judul | Playfair Display | Serif display memberi kesan editorial — ini pembeda terbesar dari tampilan admin biasa |
-| Teks & UI | Plus Jakarta Sans | Ramah tapi profesional; angka memakai mono sistem agar mudah dipindai |
+| Teks & UI | Plus Jakarta Sans | Ramah tapi profesional |
+| Angka & jam | Plus Jakarta Sans + `tabular-nums` | Dulu monospace, tapi itu membuat dashboard terasa seperti editor kode. `tabular-nums` menjaga digit tetap lurus tanpa kesan itu. Monospace kini hanya untuk `<code>` dan tuts `/` |
 | Hero band | Gradien + grain diagonal | Kesan "mahal" tanpa file gambar, jadi halaman tetap ringan |
 | Gerak | Layar pembuka, reveal saat scroll, angka menghitung naik, cincin progress | Terasa hidup tanpa memperlambat |
 | Spasi | Kelipatan 4 (`--space-1` … `--space-12`) | Ritme vertikal konsisten di semua tampilan |

@@ -23,21 +23,6 @@
   var MF_PHASES = [];
   var MF_ITEMS = [];
 
-  try { PROFILE = Object.assign(PROFILE, profileData); } catch (e) {}
-  try { CONFIG = Object.assign(CONFIG, semesterConfig); } catch (e) {}
-  try { if (Array.isArray(scheduleData)) CLASSES = scheduleData.slice(); } catch (e) {}
-  try { if (Array.isArray(academicActivities)) ACTIVITIES = academicActivities.slice(); } catch (e) {}
-  try { if (Array.isArray(guidanceData)) GUIDANCE = guidanceData.slice(); } catch (e) {}
-  try { CATEGORIES = Object.assign({}, categoryLabels); } catch (e) {}
-  try { if (Array.isArray(academicCalendar)) CALENDAR = academicCalendar.slice(); } catch (e) {}
-  try { MATHFEST = Object.assign(MATHFEST, mathfestConfig); } catch (e) {}
-  try { if (Array.isArray(mathfestPhases)) MF_PHASES = mathfestPhases.slice(); } catch (e) {}
-  try { if (Array.isArray(mathfestTimeline)) MF_ITEMS = mathfestTimeline.slice(); } catch (e) {}
-
-  CLASSES.sort(function (a, b) {
-    return a.day - b.day || toMinutes(a.start) - toMinutes(b.start);
-  });
-
   /* --------------------------------------------------------------------------
      SESSIONS = semua kegiatan yang punya slot mingguan tetap.
      Perkuliahan reguler + aktivitas akademik yang sudah dijadwalkan.
@@ -45,41 +30,85 @@
      SKS-nya TIDAK dijumlahkan di sini — beban akademik tetap dihitung terpisah
      supaya pemisahan 15 / 7 / 22 SKS tetap utuh.
      ------------------------------------------------------------------------ */
-  var SESSIONS = CLASSES.map(function (c) {
-    return {
-      id: c.id, name: c.name, code: c.code || null, day: c.day,
-      start: c.start, end: c.end, sks: c.sks, room: c.room,
-      lecturer: c.lecturer, kind: c.kind, category: c.category,
-      classGroup: c.classGroup || null, type: 'perkuliahan',
-      formality: !!c.formality
-    };
-  });
+  var SESSIONS = [];
+  var LOAD = { scheduled: 0, extra: 0, total: 0, breakdown: [] };
+  var INDEX = [];
+  var DATA_SOURCE = 'lokal';
+  var DATA_NOTES = [];
 
-  ACTIVITIES.forEach(function (a) {
-    if (!a.session) return;
-    SESSIONS.push({
-      id: 'sesi-' + a.id, name: a.name, code: a.code || null, day: a.session.day,
-      start: a.session.start, end: a.session.end, sks: a.sks, room: a.session.room,
-      lecturer: a.session.lecturer || a.supervisor, kind: CATEGORIES[a.category] || 'Aktivitas Akademik',
-      category: a.category, classGroup: a.classGroup || null, type: 'aktivitas',
-      formality: !!a.session.formality
+  /* --------------------------------------------------------------------------
+     hydrate() — satu-satunya pintu masuk data ke aplikasi.
+     Dipanggil setelah sumber data selesai dimuat (Google Sheets atau data.js).
+     Seluruh turunan dihitung ulang di sini, jadi memanggilnya kembali dengan
+     data baru sudah cukup untuk menyegarkan seluruh tampilan.
+     ------------------------------------------------------------------------ */
+  function hydrate(dataset) {
+    var d = dataset || {};
+
+    PROFILE = Object.assign(
+      { name: '—', initials: '—', nim: '—', program: '—', semester: '—', academicYear: '—' },
+      d.profile || {}
+    );
+    CONFIG = Object.assign(
+      { startDate: null, endDate: null, semester: '—', academicYear: '—' },
+      d.semester || {}
+    );
+    MATHFEST = Object.assign(
+      { name: null, organization: null, role: null, division: null },
+      d.mathfestConfig || {}
+    );
+
+    CLASSES = Array.isArray(d.classes) ? d.classes.slice() : [];
+    ACTIVITIES = Array.isArray(d.activities) ? d.activities.slice() : [];
+    GUIDANCE = Array.isArray(d.guidance) ? d.guidance.slice() : [];
+    CALENDAR = Array.isArray(d.calendar) ? d.calendar.slice() : [];
+    MF_PHASES = Array.isArray(d.mathfestPhases) ? d.mathfestPhases.slice() : [];
+    MF_ITEMS = Array.isArray(d.mathfestTimeline) ? d.mathfestTimeline.slice() : [];
+    CATEGORIES = Object.assign({}, d.categories || {});
+
+    CLASSES.sort(function (a, b) {
+      return a.day - b.day || toMinutes(a.start) - toMinutes(b.start);
     });
-  });
 
-  SESSIONS.sort(function (a, b) {
-    return a.day - b.day || toMinutes(a.start) - toMinutes(b.start);
-  });
+    SESSIONS = CLASSES.map(function (c) {
+      return {
+        id: c.id, name: c.name, code: c.code || null, day: c.day,
+        start: c.start, end: c.end, sks: c.sks, room: c.room,
+        lecturer: c.lecturer, kind: c.kind, category: c.category,
+        classGroup: c.classGroup || null, type: 'perkuliahan',
+        formality: !!c.formality
+      };
+    });
 
-  /* Agenda kepanitiaan diurutkan berdasarkan tanggal mulai; agenda tanpa
-     tanggal ditempatkan paling akhir. */
-  MF_ITEMS.sort(function (a, b) {
-    var da = parseISODate(a.start);
-    var db = parseISODate(b.start);
-    if (!da && !db) return 0;
-    if (!da) return 1;
-    if (!db) return -1;
-    return da - db || (parseISODate(a.end) || da) - (parseISODate(b.end) || db);
-  });
+    ACTIVITIES.forEach(function (a) {
+      if (!a.session) return;
+      SESSIONS.push({
+        id: 'sesi-' + a.id, name: a.name, code: a.code || null, day: a.session.day,
+        start: a.session.start, end: a.session.end, sks: a.sks, room: a.session.room,
+        lecturer: a.session.lecturer || a.supervisor, kind: CATEGORIES[a.category] || 'Aktivitas Akademik',
+        category: a.category, classGroup: a.classGroup || null, type: 'aktivitas',
+        formality: !!a.session.formality
+      });
+    });
+
+    SESSIONS.sort(function (a, b) {
+      return a.day - b.day || toMinutes(a.start) - toMinutes(b.start);
+    });
+
+    /* Agenda kepanitiaan diurutkan berdasarkan tanggal mulai; agenda tanpa
+       tanggal ditempatkan paling akhir. */
+    MF_ITEMS.sort(function (a, b) {
+      var da = parseISODate(a.start);
+      var db = parseISODate(b.start);
+      if (!da && !db) return 0;
+      if (!da) return 1;
+      if (!db) return -1;
+      return da - db || (parseISODate(a.end) || da) - (parseISODate(b.end) || db);
+    });
+
+    LOAD = buildLoad();
+    INDEX = buildIndex();
+  }
 
   /* ==========================================================================
      2. KONSTANTA & UTILITAS
@@ -235,7 +264,7 @@
      4. TURUNAN DATA (selectors)
      ======================================================================== */
 
-  var LOAD = (function () {
+  function buildLoad() {
     var scheduled = CLASSES.reduce(function (sum, c) { return sum + (c.sks || 0); }, 0);
     var extra = ACTIVITIES.reduce(function (sum, a) { return sum + (a.sks || 0); }, 0);
 
@@ -248,7 +277,7 @@
     });
 
     return { scheduled: scheduled, extra: extra, total: scheduled + extra, breakdown: breakdown };
-  })();
+  }
 
   function classesOn(day) {
     return SESSIONS.filter(function (c) { return c.day === day; });
@@ -346,7 +375,7 @@
      5. INDEKS PENCARIAN
      ======================================================================== */
 
-  var INDEX = (function () {
+  function buildIndex() {
     var items = [];
 
     CLASSES.forEach(function (c) {
@@ -407,7 +436,7 @@
       i.haystack = i.terms.filter(Boolean).join(' ').toLowerCase();
     });
     return items;
-  })();
+  }
 
   function runSearch(query) {
     var q = String(query || '').trim().toLowerCase();
@@ -1830,6 +1859,7 @@
       name: document.getElementById('profile-name'),
       meta: document.getElementById('profile-meta'),
       footerIdentity: document.getElementById('footer-identity'),
+      footerSource: document.getElementById('footer-source'),
       themeToggle: document.getElementById('theme-toggle'),
       searchInput: document.getElementById('search-input'),
       searchClear: document.getElementById('search-clear'),
@@ -1847,16 +1877,100 @@
 
     initTheme();
     setupIntro();
-    fillProfile();
     buildTabs();
     bindEvents();
+    showLoadingState();
 
-    lastSignature = signature(new Date());
-    var live = liveClass(new Date());
-    lastLiveId = live ? live.id : null;
+    loadDataset(function (result) {
+      DATA_SOURCE = result.source;
+      DATA_NOTES = result.notes || [];
 
-    setView('dashboard');
-    startTimer();
+      hydrate(result.data);
+      fillProfile();
+      renderSourceNote();
+
+      lastSignature = signature(new Date());
+      var live = liveClass(new Date());
+      lastLiveId = live ? live.id : null;
+
+      setView('dashboard');
+      startTimer();
+    });
+  }
+
+  /* Layar sementara selama data diambil. Tanpa ini, dashboard tampak kosong
+     dan pengguna tidak tahu apakah aplikasinya rusak atau sedang memuat. */
+  function showLoadingState() {
+    var view = dom.views.dashboard;
+    if (!view) return;
+    view.innerHTML =
+      '<header class="greeting"><h1>Menyiapkan dashboard</h1>' +
+      '<p class="greeting-meta"><span>Mengambil jadwal dan agenda terbaru…</span></p></header>' +
+      '<div class="card card-pad"><p class="semester-note">' + icon('clock') +
+      '<span>Kalau data online tidak terjangkau, dashboard otomatis memakai ' +
+      'data yang tersimpan di <code>data.js</code>.</span></p></div>';
+  }
+
+  /* Pembungkus tipis di atas sheets.js. Kalau berkas itu tidak dimuat sekalipun,
+     aplikasi tetap berjalan dengan data.js. */
+  function loadDataset(callback) {
+    var source = window.AcademicDataSource;
+
+    if (!source || typeof source.load !== 'function') {
+      /* data.js memakai `const`, yang tidak menjadi properti window. Nilainya
+         hanya terbaca lewat nama variabelnya langsung. */
+      var read = function (fn, empty) {
+        try {
+          var v = fn();
+          return v === undefined || v === null ? empty : v;
+        } catch (e) {
+          return empty;
+        }
+      };
+
+      callback({
+        data: {
+          profile: read(function () { return profileData; }, {}),
+          semester: read(function () { return semesterConfig; }, {}),
+          calendar: read(function () { return academicCalendar; }, []),
+          classes: read(function () { return scheduleData; }, []),
+          activities: read(function () { return academicActivities; }, []),
+          guidance: read(function () { return guidanceData; }, []),
+          categories: read(function () { return categoryLabels; }, {}),
+          mathfestConfig: read(function () { return mathfestConfig; }, {}),
+          mathfestPhases: read(function () { return mathfestPhases; }, []),
+          mathfestTimeline: read(function () { return mathfestTimeline; }, [])
+        },
+        source: 'lokal',
+        notes: ['sheets.js tidak dimuat — memakai data lokal.']
+      });
+      return;
+    }
+
+    try {
+      source.load(callback);
+    } catch (err) {
+      console.error('Gagal memuat sumber data:', err);
+      callback({ data: {}, source: 'lokal', notes: [String(err && err.message || err)] });
+    }
+  }
+
+  function renderSourceNote() {
+    if (!dom.footerSource) return;
+
+    var labels = {
+      sheets: 'Data langsung dari Google Sheets',
+      campuran: 'Sebagian data dari Google Sheets, sisanya dari data.js',
+      lokal: 'Data akademik dikelola di data.js'
+    };
+    var text = labels[DATA_SOURCE] || labels.lokal;
+
+    if (DATA_NOTES.length) {
+      text += ' · ada catatan, lihat konsol';
+      DATA_NOTES.forEach(function (note) { console.warn('[sumber data]', note); });
+    }
+
+    dom.footerSource.textContent = text;
   }
 
   if (document.readyState === 'loading') {
