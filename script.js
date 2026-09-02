@@ -1359,6 +1359,7 @@
   var lastSignature = '';
   var lastLiveId = null;
   var timer = null;
+  var pendingReveal = false;
 
   function renderCurrent() {
     var now = new Date();
@@ -1381,6 +1382,77 @@
       dom.views[currentView].innerHTML = emptyState('Terjadi kesalahan',
         'Tampilan tidak dapat dimuat. Periksa struktur data pada data.js.');
     }
+
+    /* Reveal hanya dianimasikan saat pengguna benar-benar berpindah tampilan.
+       Render ulang dari tick (status jadwal berubah) langsung menampilkan
+       semuanya — kalau tidak, konten yang sedang dibaca akan berkedip. */
+    applyReveal(pendingReveal);
+    pendingReveal = false;
+  }
+
+  /* --------------------------------------------------------------------------
+     REVEAL SAAT SCROLL
+     ----------------------------------------------------------------------------
+     Elemen yang belum terlihat disembunyikan, lalu naik lembut begitu masuk
+     layar. Kelas .reveal hanya dipasang dari sini — tanpa JS atau tanpa
+     IntersectionObserver tidak ada yang pernah disembunyikan.
+     ------------------------------------------------------------------------ */
+  var REVEAL_TARGETS = [
+    '.greeting', '.search-head',
+    '.dash-col > *', '.week-grid > *', '.activity-grid > *',
+    '.guidance-grid > *', '.result-list > *', '.stack > *',
+    '.mf-list > *', '.mf-alert-list > *'
+  ].join(',');
+
+  var revealObserver = null;
+
+  function clearReveal() {
+    if (revealObserver) {
+      revealObserver.disconnect();
+      revealObserver = null;
+    }
+  }
+
+  function applyReveal(animate) {
+    clearReveal();
+
+    var view = dom.views[currentView];
+    if (!view) return;
+
+    var nodes = Array.prototype.slice.call(view.querySelectorAll(REVEAL_TARGETS));
+    if (!nodes.length) return;
+
+    /* Buang elemen yang sudah tercakup induknya, supaya tidak ada dua lapis
+       reveal bersarang (anak tersembunyi di dalam induk yang juga tersembunyi). */
+    var targets = nodes.filter(function (el) {
+      return !nodes.some(function (other) { return other !== el && other.contains(el); });
+    });
+
+    var supported = typeof window.IntersectionObserver === 'function';
+    if (!animate || prefersReducedMotion() || !supported) {
+      targets.forEach(function (el) { el.classList.remove('reveal', 'is-visible'); });
+      return;
+    }
+
+    targets.forEach(function (el) {
+      el.classList.add('reveal');
+      el.classList.remove('is-visible');
+      var siblings = el.parentNode ? el.parentNode.children : [el];
+      var index = Array.prototype.indexOf.call(siblings, el);
+      el.setAttribute('data-reveal-delay', Math.min(index, 5) * 65);
+    });
+
+    revealObserver = new window.IntersectionObserver(function (entries, obs) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        var el = entry.target;
+        el.style.transitionDelay = (el.getAttribute('data-reveal-delay') || 0) + 'ms';
+        el.classList.add('is-visible');
+        obs.unobserve(el);
+      });
+    }, { rootMargin: '0px 0px -6% 0px', threshold: 0.04 });
+
+    targets.forEach(function (el) { revealObserver.observe(el); });
   }
 
   function prefersReducedMotion() {
@@ -1448,6 +1520,7 @@
       else tab.removeAttribute('aria-current');
     });
 
+    pendingReveal = true;
     renderCurrent();
 
     /* Jalankan ulang animasi masuk agar perpindahan tampilan terasa disengaja */
@@ -1699,6 +1772,56 @@
     window.addEventListener('pagehide', stopTimer);
   }
 
+  /* --------------------------------------------------------------------------
+     LAYAR PEMBUKA
+     ----------------------------------------------------------------------------
+     Dibuka oleh skrip inline di index.html (kelas .is-booting pada <html>),
+     ditutup di sini. Tiga jaring pengaman supaya halaman tidak mungkin
+     tersangkut: bisa dilewati dengan klik atau tombol apa pun, ditutup saat
+     window selesai load, dan tetap ditutup paksa setelah 2,6 detik apa pun
+     yang terjadi.
+     ------------------------------------------------------------------------ */
+  function setupIntro() {
+    var root = document.documentElement;
+    var intro = document.getElementById('intro');
+
+    if (!intro || !root.classList.contains('is-booting')) {
+      root.classList.remove('is-booting');
+      return;
+    }
+
+    var done = false;
+
+    function dismiss() {
+      if (done) return;
+      done = true;
+
+      intro.classList.add('is-leaving');
+      root.classList.remove('is-booting');
+
+      document.removeEventListener('pointerdown', dismiss);
+      document.removeEventListener('keydown', dismiss);
+
+      window.setTimeout(function () {
+        if (intro.parentNode) intro.parentNode.removeChild(intro);
+      }, 650);
+    }
+
+    document.addEventListener('pointerdown', dismiss);
+    document.addEventListener('keydown', dismiss);
+
+    /* Jalur normal: tunggu aset selesai, lalu beri jeda supaya animasi
+       pembukanya sempat terbaca mata. */
+    if (document.readyState === 'complete') {
+      window.setTimeout(dismiss, 1150);
+    } else {
+      window.addEventListener('load', function () { window.setTimeout(dismiss, 950); });
+    }
+
+    /* Pengaman terakhir — misalnya font gagal dimuat dan event load tertahan. */
+    window.setTimeout(dismiss, 2600);
+  }
+
   function init() {
     dom = {
       tabs: document.getElementById('tabs'),
@@ -1723,6 +1846,7 @@
     };
 
     initTheme();
+    setupIntro();
     fillProfile();
     buildTabs();
     bindEvents();

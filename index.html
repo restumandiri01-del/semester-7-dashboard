@@ -9,7 +9,10 @@
   <meta name="theme-color" content="#0E1413" media="(prefers-color-scheme: dark)">
   <title>Semester 7 · Restu Mandiri</title>
 
-  <!-- Terapkan tema sebelum paint pertama agar tidak ada kedipan warna. -->
+  <!-- Terapkan tema sebelum paint pertama agar tidak ada kedipan warna.
+       Sekaligus tandai bahwa JS aktif, supaya layar pembuka hanya muncul kalau
+       memang ada yang bisa menutupnya lagi. Tanpa JS, layar pembuka tidak
+       pernah tampil dan aplikasi langsung terlihat. -->
   <script>
     (function () {
       try {
@@ -17,6 +20,11 @@
         var theme = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         document.documentElement.setAttribute('data-theme', theme);
       } catch (e) { /* localStorage tidak tersedia — pakai default light */ }
+
+      try {
+        var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!reduce) document.documentElement.classList.add('is-booting');
+      } catch (e) { /* tanpa matchMedia, lewati saja layar pembukanya */ }
     })();
   </script>
 
@@ -32,6 +40,17 @@
 </head>
 
 <body>
+  <!-- Layar pembuka. Dekoratif sepenuhnya: aria-hidden supaya pembaca layar
+       langsung membaca konten asli, dan bisa dilewati dengan klik atau tombol
+       apa pun. -->
+  <div class="intro" id="intro" aria-hidden="true">
+    <div class="intro-inner">
+      <p class="intro-kicker">Academic OS</p>
+      <p class="intro-title">Semester 7</p>
+      <span class="intro-bar"><span class="intro-bar-fill"></span></span>
+    </div>
+  </div>
+
   <a class="skip-link" href="#main">Lewati ke konten utama</a>
 
   <header class="app-header">

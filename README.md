@@ -239,7 +239,7 @@ jangan warna per komponen.
 | Judul | Playfair Display | Serif display memberi kesan editorial — ini pembeda terbesar dari tampilan admin biasa |
 | Teks & UI | Plus Jakarta Sans | Ramah tapi profesional; angka memakai mono sistem agar mudah dipindai |
 | Hero band | Gradien + grain diagonal | Kesan "mahal" tanpa file gambar, jadi halaman tetap ringan |
-| Gerak | Stagger 45ms, angka menghitung naik, cincin progress | Terasa hidup tanpa memperlambat |
+| Gerak | Layar pembuka, reveal saat scroll, angka menghitung naik, cincin progress | Terasa hidup tanpa memperlambat |
 | Spasi | Kelipatan 4 (`--space-1` … `--space-12`) | Ritme vertikal konsisten di semua tampilan |
 | Motion | 140–220ms | Cukup terasa, tidak memperlambat |
 
@@ -256,8 +256,16 @@ Bayangan, warna aksen, dan warna status masing-masing disetel ulang di
   form >= 3:1 (WCAG 1.4.11), pada mode terang maupun gelap.
 - Tidak ada scroll horizontal sampai lebar 320px; `.tabs` dan `.chip-group`
   memang dapat digeser ke samping, dan itu disengaja.
-- `prefers-reduced-motion` dihormati: stagger, hitung-naik angka, dan seluruh
-  transform dimatikan. Nilai akhir sudah ada di HTML sejak awal, jadi angka
+- **Layar pembuka** hanya muncul kalau `<html>` diberi kelas `is-booting` oleh
+  skrip inline di `index.html`. Tanpa JavaScript kelas itu tidak pernah
+  terpasang, sehingga layar pembuka mustahil tersangkut. Ada tiga jaring
+  pengaman untuk menutupnya: klik atau tombol apa pun, event `load`, dan
+  batas paksa 2,6 detik.
+- **Reveal saat scroll** memakai `IntersectionObserver`. Kelas `.reveal` hanya
+  dipasang dari JavaScript — tanpa JS atau tanpa `IntersectionObserver`, tidak
+  ada elemen yang pernah disembunyikan.
+- `prefers-reduced-motion` dihormati: layar pembuka dilewati sepenuhnya, reveal
+  dimatikan, hitung-naik angka dilewati, dan seluruh transform dimatikan. Nilai akhir sudah ada di HTML sejak awal, jadi angka
   tetap benar tanpa JS sekalipun.
 - Animasi masuk hanya dijalankan dari `setView`, bukan dari `tick` — kalau ikut
   tiap render ulang, angka SKS akan berkedip tiap kali status jadwal berubah.

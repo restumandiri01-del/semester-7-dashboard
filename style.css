@@ -155,7 +155,10 @@
 *::before,
 *::after { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
 
 body {
   margin: 0;
@@ -223,6 +226,112 @@ code {
   height: 16px;
   flex: none;
   display: block;
+}
+
+/* ---------------------------------------------------------------------------
+   2b. LAYAR PEMBUKA
+   ----------------------------------------------------------------------------
+   Hanya tampil kalau <html> punya kelas .is-booting, yang dipasang oleh skrip
+   inline di index.html. Artinya: tanpa JS layar ini tidak pernah muncul, jadi
+   mustahil membuat halaman tersangkut.
+   ------------------------------------------------------------------------- */
+.intro { display: none; }
+
+html.is-booting .intro {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  background: var(--background);
+}
+html.is-booting body { overflow: hidden; }
+
+/* Konten aplikasi ikut naik lembut begitu layar pembuka pergi */
+html.is-booting .app-header,
+html.is-booting main,
+html.is-booting .app-footer { opacity: 0; }
+
+.app-header, main, .app-footer {
+  opacity: 1;
+  transition: opacity 0.5s var(--ease-out);
+}
+
+.intro.is-leaving {
+  opacity: 0;
+  transform: scale(1.03);
+  transition: opacity 0.55s var(--ease-out), transform 0.55s var(--ease-out);
+  pointer-events: none;
+}
+
+.intro-inner { text-align: center; padding-inline: var(--space-6); }
+
+.intro-kicker {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  animation: intro-up 0.7s var(--ease-out) 0.05s both;
+}
+
+.intro-title {
+  margin-top: var(--space-3);
+  font-family: var(--font-display);
+  font-size: clamp(2.75rem, 9vw, 4.5rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  animation: intro-up 0.8s var(--ease-out) 0.14s both;
+}
+
+.intro-bar {
+  display: block;
+  width: min(220px, 60vw);
+  height: 2px;
+  margin: var(--space-6) auto 0;
+  border-radius: var(--r-full);
+  background: var(--border-strong);
+  overflow: hidden;
+}
+.intro-bar-fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: var(--r-full);
+  background: var(--primary-bright);
+  transform-origin: left center;
+  animation: intro-load 1.15s var(--ease) 0.2s both;
+}
+
+@keyframes intro-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes intro-load {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* ---------------------------------------------------------------------------
+   2c. REVEAL SAAT SCROLL
+   ----------------------------------------------------------------------------
+   Kelas .reveal hanya dipasang oleh JS. Tanpa JS atau tanpa
+   IntersectionObserver, elemen tidak pernah disembunyikan.
+   ------------------------------------------------------------------------- */
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.55s var(--ease-out), transform 0.55s var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal, .reveal.is-visible { opacity: 1; transform: none; transition: none; }
 }
 
 /* ---------------------------------------------------------------------------
@@ -504,33 +613,10 @@ main:focus { outline: none; }
   to { opacity: 1; }
 }
 
-@keyframes rise-in {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: none; }
-}
-
-/* Stagger: kartu muncul berurutan, bukan serentak. Jeda ~45ms per item —
-   cukup terasa berirama, belum terasa lambat. */
-@media (prefers-reduced-motion: no-preference) {
-  .view.is-entering :is(.greeting, .search-head),
-  .view.is-entering :is(.dash-col, .week-grid, .activity-grid, .guidance-grid,
-    .result-list, .mf-list, .mf-alert-list, .stack) > * {
-    animation: rise-in 0.44s var(--ease-out) both;
-  }
-
-  .view.is-entering :is(.dash-col, .week-grid, .activity-grid, .guidance-grid,
-    .result-list, .mf-list, .mf-alert-list, .stack) > *:nth-child(1) { animation-delay: 60ms; }
-  .view.is-entering :is(.dash-col, .week-grid, .activity-grid, .guidance-grid,
-    .result-list, .mf-list, .mf-alert-list, .stack) > *:nth-child(2) { animation-delay: 105ms; }
-  .view.is-entering :is(.dash-col, .week-grid, .activity-grid, .guidance-grid,
-    .result-list, .mf-list, .mf-alert-list, .stack) > *:nth-child(3) { animation-delay: 150ms; }
-  .view.is-entering :is(.dash-col, .week-grid, .activity-grid, .guidance-grid,
-    .result-list, .mf-list, .mf-alert-list, .stack) > *:nth-child(4) { animation-delay: 195ms; }
-  .view.is-entering :is(.dash-col, .week-grid, .activity-grid, .guidance-grid,
-    .result-list, .mf-list, .mf-alert-list, .stack) > *:nth-child(5) { animation-delay: 240ms; }
-  .view.is-entering :is(.dash-col, .week-grid, .activity-grid, .guidance-grid,
-    .result-list, .mf-list, .mf-alert-list, .stack) > *:nth-child(n+6) { animation-delay: 285ms; }
-}
+/* Stagger tidak lagi ditangani CSS. Sekarang dikendalikan IntersectionObserver
+   di script.js (lihat "REVEAL SAAT SCROLL"), supaya kartu yang berada di bawah
+   layar baru muncul ketika benar-benar di-scroll — bukan langsung habis saat
+   halaman dibuka. */
 
 .stack { display: flex; flex-direction: column; gap: var(--space-8); }
 
