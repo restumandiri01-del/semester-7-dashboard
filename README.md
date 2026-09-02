@@ -236,7 +236,10 @@ jangan warna per komponen.
 | Latar | Kertas hangat `#F7F6F3` | Menghindari kesan sistem kampus yang dingin dan birokratis |
 | Aksi | Tinta teal `#0F766E` | Tenang dan fokus, cocok untuk alat belajar |
 | Sorotan | Stabilo oranye `#C2410C` | Dipakai hemat, hanya untuk hal mendesak dan penanda hari ini |
-| Font | Plus Jakarta Sans | Ramah tapi profesional; angka memakai mono sistem agar mudah dipindai |
+| Judul | Playfair Display | Serif display memberi kesan editorial — ini pembeda terbesar dari tampilan admin biasa |
+| Teks & UI | Plus Jakarta Sans | Ramah tapi profesional; angka memakai mono sistem agar mudah dipindai |
+| Hero band | Gradien + grain diagonal | Kesan "mahal" tanpa file gambar, jadi halaman tetap ringan |
+| Gerak | Stagger 45ms, angka menghitung naik, cincin progress | Terasa hidup tanpa memperlambat |
 | Spasi | Kelipatan 4 (`--space-1` … `--space-12`) | Ritme vertikal konsisten di semua tampilan |
 | Motion | 140–220ms | Cukup terasa, tidak memperlambat |
 
@@ -253,4 +256,11 @@ Bayangan, warna aksen, dan warna status masing-masing disetel ulang di
   form >= 3:1 (WCAG 1.4.11), pada mode terang maupun gelap.
 - Tidak ada scroll horizontal sampai lebar 320px; `.tabs` dan `.chip-group`
   memang dapat digeser ke samping, dan itu disengaja.
-- `prefers-reduced-motion` dihormati: seluruh animasi dan transform dimatikan.
+- `prefers-reduced-motion` dihormati: stagger, hitung-naik angka, dan seluruh
+  transform dimatikan. Nilai akhir sudah ada di HTML sejak awal, jadi angka
+  tetap benar tanpa JS sekalipun.
+- Animasi masuk hanya dijalankan dari `setView`, bukan dari `tick` — kalau ikut
+  tiap render ulang, angka SKS akan berkedip tiap kali status jadwal berubah.
+- `--text-subtle` tidak boleh dipakai langsung di atas hero band: di sana
+  kontrasnya hanya ~3,7–4,5:1. Pakai `--text-muted`, atau beri elemen itu latar
+  opaque sendiri.

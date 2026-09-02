@@ -82,7 +82,9 @@
   --r-xl: 22px;
   --r-full: 999px;
 
-  /* Tipografi */
+  /* Tipografi — serif display untuk judul, sans untuk teks dan antarmuka.
+     Kontras dua family inilah yang memberi kesan editorial. */
+  --font-display: "Playfair Display", Georgia, "Times New Roman", serif;
   --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
     Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo,
@@ -494,10 +496,40 @@ main {
 }
 main:focus { outline: none; }
 
-.view.is-entering { animation: view-in 0.26s var(--ease-out) both; }
-@keyframes view-in {
-  from { opacity: 0; transform: translateY(6px); }
+/* Induk hanya memudar; anak-anaknya yang naik bertahap. Dipisah supaya
+   transform tidak bertumpuk dua lapis dan gerakannya tetap ringan. */
+.view.is-entering { animation: view-fade 0.2s ease both; }
+@keyframes view-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: none; }
+}
+
+/* Stagger: kartu muncul berurutan, bukan serentak. Jeda ~45ms per item —
+   cukup terasa berirama, belum terasa lambat. */
+@media (prefers-reduced-motion: no-preference) {
+  .view.is-entering :is(.greeting, .search-head),
+  .view.is-entering :is(.dash-col, .week-grid, .activity-grid, .guidance-grid,
+    .result-list, .mf-list, .mf-alert-list, .stack) > * {
+    animation: rise-in 0.44s var(--ease-out) both;
+  }
+
+  .view.is-entering :is(.dash-col, .week-grid, .activity-grid, .guidance-grid,
+    .result-list, .mf-list, .mf-alert-list, .stack) > *:nth-child(1) { animation-delay: 60ms; }
+  .view.is-entering :is(.dash-col, .week-grid, .activity-grid, .guidance-grid,
+    .result-list, .mf-list, .mf-alert-list, .stack) > *:nth-child(2) { animation-delay: 105ms; }
+  .view.is-entering :is(.dash-col, .week-grid, .activity-grid, .guidance-grid,
+    .result-list, .mf-list, .mf-alert-list, .stack) > *:nth-child(3) { animation-delay: 150ms; }
+  .view.is-entering :is(.dash-col, .week-grid, .activity-grid, .guidance-grid,
+    .result-list, .mf-list, .mf-alert-list, .stack) > *:nth-child(4) { animation-delay: 195ms; }
+  .view.is-entering :is(.dash-col, .week-grid, .activity-grid, .guidance-grid,
+    .result-list, .mf-list, .mf-alert-list, .stack) > *:nth-child(5) { animation-delay: 240ms; }
+  .view.is-entering :is(.dash-col, .week-grid, .activity-grid, .guidance-grid,
+    .result-list, .mf-list, .mf-alert-list, .stack) > *:nth-child(n+6) { animation-delay: 285ms; }
 }
 
 .stack { display: flex; flex-direction: column; gap: var(--space-8); }
@@ -686,23 +718,69 @@ main:focus { outline: none; }
 /* ---------------------------------------------------------------------------
    6. DASHBOARD
    ------------------------------------------------------------------------- */
-.greeting { margin-bottom: var(--space-8); }
-.greeting h1 { font-size: 1.875rem; text-wrap: balance; }
+/* Hero band — satu-satunya tempat di aplikasi yang boleh tampil ekspresif.
+   Kesan "mahal" datang dari gradien lembut + grain, bukan dari file gambar,
+   jadi halaman tetap ringan dan tidak perlu aset tambahan. */
+.greeting,
+.search-head {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: var(--space-8);
+  padding: var(--space-8) var(--space-8) var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  background:
+    radial-gradient(115% 130% at 6% 0%,
+      color-mix(in srgb, var(--primary-bright) 14%, transparent) 0%, transparent 56%),
+    radial-gradient(95% 130% at 100% 105%,
+      color-mix(in srgb, var(--highlight-bright) 10%, transparent) 0%, transparent 52%),
+    var(--surface);
+}
+/* Grain halus — garis diagonal tipis, hampir tak terlihat tapi menghapus
+   kesan "gradien digital" yang datar. */
+.greeting::after,
+.search-head::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--text) 4%, transparent) 0 1px,
+    transparent 1px 7px
+  );
+  opacity: 0.5;
+}
+.greeting > *,
+.search-head > * { position: relative; z-index: 1; }
+
+.greeting h1 {
+  font-family: var(--font-display);
+  font-size: 2.75rem;
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
 .greeting-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0 var(--space-3);
-  margin-top: 7px;
+  margin-top: var(--space-3);
   font-size: 0.875rem;
   color: var(--text-muted);
 }
+/* Chip jam memakai latar opaque sendiri, jadi kontrasnya dihitung terhadap
+   --surface-secondary, bukan terhadap gradien hero di belakangnya.
+   Warnanya --text-muted (bukan --text-subtle): di atas gradien hero,
+   --text-subtle hanya mencapai ~3.7-4.5:1 dan tidak lolos AA. */
 .greeting-clock {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: 0.8125rem;
-  color: var(--text-subtle);
-  padding: 2px 8px;
+  color: var(--text-muted);
+  padding: 3px 9px;
   border-radius: var(--r-sm);
   background: var(--surface-secondary);
 }
@@ -752,10 +830,11 @@ main:focus { outline: none; }
   background: var(--surface-secondary);
 }
 .focus-title {
-  font-size: 1.5rem;
+  font-family: var(--font-display);
+  font-size: 2rem;
   font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.024em;
+  line-height: 1.14;
+  letter-spacing: -0.018em;
   text-wrap: balance;
 }
 .focus-sub {
@@ -1026,6 +1105,45 @@ main:focus { outline: none; }
   font-variant-numeric: tabular-nums;
 }
 
+/* Cincin progress semester — proporsi lebih cepat terbaca sebagai lingkaran
+   daripada sebagai bar tipis, dan memberi satu titik fokus visual. */
+.semester-ring {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+}
+.ring-wrap { position: relative; width: 96px; height: 96px; flex: none; }
+.ring { width: 100%; height: 100%; transform: rotate(-90deg); display: block; }
+.ring circle { fill: none; stroke-width: 9; }
+.ring-bg { stroke: var(--surface-secondary); }
+.ring-fg {
+  stroke: var(--primary-bright);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s var(--ease-out);
+}
+.ring-value {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  color: var(--text);
+}
+.ring-unit {
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-subtle);
+  margin-left: 1px;
+  align-self: center;
+}
+.ring-side { min-width: 0; flex: 1; }
+
 /* Agenda kalender akademik */
 .agenda {
   margin-top: var(--space-5);
@@ -1208,10 +1326,11 @@ main:focus { outline: none; }
 }
 .activity-title { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .activity-title .name {
-  font-size: 1.0625rem;
-  font-weight: 700;
-  letter-spacing: -0.018em;
-  line-height: 1.3;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  line-height: 1.25;
 }
 .activity-title .sks {
   font-size: 0.75rem;
@@ -1253,10 +1372,11 @@ main:focus { outline: none; }
 .guidance-kicker .icon { width: 15px; height: 15px; }
 .guidance-title {
   margin-top: 7px;
-  font-size: 1.1875rem;
-  font-weight: 700;
-  letter-spacing: -0.022em;
-  line-height: 1.25;
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.014em;
+  line-height: 1.22;
 }
 /* Empat keterangan bimbingan dibaca paling rapi sebagai blok 2x2. */
 .guidance-card .meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1264,9 +1384,14 @@ main:focus { outline: none; }
 /* ---------------------------------------------------------------------------
    9. PENCARIAN
    ------------------------------------------------------------------------- */
-.search-head { margin-bottom: var(--space-6); }
-.search-head h1 { font-size: 1.375rem; }
-.search-head p { margin-top: 6px; font-size: 0.8125rem; color: var(--text-muted); }
+.search-head h1 {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.018em;
+}
+.search-head p { margin-top: var(--space-2); font-size: 0.875rem; color: var(--text-muted); }
 .search-head .query { color: var(--text); font-weight: 700; }
 
 .result-list { display: flex; flex-direction: column; gap: var(--space-3); }
@@ -1502,8 +1627,18 @@ main:focus { outline: none; }
 
   main { padding-block: var(--space-6) 56px; }
 
-  .greeting { margin-bottom: var(--space-6); }
-  .greeting h1 { font-size: 1.5rem; }
+  .greeting,
+  .search-head {
+    margin-bottom: var(--space-6);
+    padding: var(--space-6) var(--space-5) var(--space-5);
+    border-radius: var(--r-lg);
+  }
+  .greeting h1 { font-size: 2rem; }
+  .search-head h1 { font-size: 1.625rem; }
+
+  .semester-ring { gap: var(--space-4); }
+  .ring-wrap { width: 78px; height: 78px; }
+  .ring-value { font-size: 1.25rem; }
 
   .focus-card { padding: var(--space-5) var(--space-4) var(--space-4); border-radius: var(--r-lg); }
   .focus-title { font-size: 1.3125rem; }

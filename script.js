@@ -676,8 +676,30 @@
 
   function loadFigure(n, label, isTotal) {
     return '<div class="load-figure' + (isTotal ? ' is-total' : '') + '">' +
-      '<span class="value">' + n + ' <span class="unit">SKS</span></span>' +
+      '<span class="value"><span class="counter" data-count="' + n + '">' + n + '</span> ' +
+      '<span class="unit">SKS</span></span>' +
       '<span class="label">' + esc(label) + '</span></div>';
+  }
+
+  /* Cincin progress semester. Persennya tetap ditulis sebagai teks supaya
+     informasinya tidak bergantung pada bentuk atau warna saja. */
+  function progressRing(percent) {
+    var pct = Math.min(100, Math.max(0, percent));
+    var radius = 42;
+    var circumference = 2 * Math.PI * radius;
+    var offset = circumference * (1 - pct / 100);
+
+    return '<div class="ring-wrap">' +
+      '<svg class="ring" viewBox="0 0 100 100" role="img" ' +
+      'aria-label="Semester berjalan ' + pct + ' persen">' +
+      '<circle class="ring-bg" cx="50" cy="50" r="' + radius + '"></circle>' +
+      '<circle class="ring-fg" cx="50" cy="50" r="' + radius + '" ' +
+      'style="stroke-dasharray:' + circumference.toFixed(1) +
+      ';stroke-dashoffset:' + offset.toFixed(1) + '"></circle>' +
+      '</svg>' +
+      '<span class="ring-value" aria-hidden="true">' + pct +
+      '<span class="ring-unit">%</span></span>' +
+      '</div>';
   }
 
   function quickItem(target, iconName, label) {
@@ -694,13 +716,14 @@
         '<span>Progress semester akan aktif setelah tanggal semester dikonfigurasi. ' +
         'Isi <code>startDate</code> dan <code>endDate</code> pada <code>semesterConfig</code> di <code>data.js</code>.</span></p>';
     } else {
-      html = '<p class="semester-note">' + icon('clock') +
+      html = '<div class="semester-ring">' + progressRing(p.percent) +
+        '<div class="ring-side">' +
+        '<p class="semester-note">' + icon('clock') +
         '<span>Semester ' + esc(CONFIG.semester) + ' · ' + esc(CONFIG.academicYear) +
-        ' berjalan <strong>' + p.percent + '%</strong>, tersisa sekitar ' + p.weeksLeft + ' pekan.</span></p>' +
-        '<div class="progress-track" style="margin-top:14px">' +
-        '<span class="progress-fill" style="width:' + p.percent + '%"></span></div>' +
+        ' berjalan, tersisa sekitar <strong>' + p.weeksLeft + ' pekan</strong>.</span></p>' +
         '<p class="semester-figures"><span>' + esc(dateRangeLabel(CONFIG.startDate, CONFIG.startDate)) +
-        '</span><span>' + esc(dateRangeLabel(CONFIG.endDate, CONFIG.endDate)) + '</span></p>';
+        '</span><span>' + esc(dateRangeLabel(CONFIG.endDate, CONFIG.endDate)) + '</span></p>' +
+        '</div></div>';
     }
 
     if (!CALENDAR.length) return html;
@@ -1042,7 +1065,7 @@
 
   function mfFigure(n, label, isTotal) {
     return '<div class="load-figure' + (isTotal ? ' is-total' : '') + '">' +
-      '<span class="value">' + n + '</span>' +
+      '<span class="value"><span class="counter" data-count="' + n + '">' + n + '</span></span>' +
       '<span class="label">' + esc(label) + '</span></div>';
   }
 
@@ -1360,6 +1383,57 @@
     }
   }
 
+  function prefersReducedMotion() {
+    try {
+      return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+     Animasi masuk untuk angka dan cincin progress.
+     Sengaja HANYA dipanggil dari setView, tidak dari tick — kalau ikut tiap
+     render ulang, angka SKS akan berkedip tiap kali status jadwal berubah.
+     Nilai akhir sudah tertulis di HTML sejak awal, jadi tanpa JS atau dengan
+     reduced-motion angkanya tetap benar.
+     ------------------------------------------------------------------------ */
+  function animateEntrance() {
+    var view = dom.views[currentView];
+    if (!view || prefersReducedMotion()) return;
+
+    Array.prototype.forEach.call(view.querySelectorAll('.counter[data-count]'), function (el) {
+      var target = parseInt(el.getAttribute('data-count'), 10);
+      if (!isFinite(target) || target <= 0) return;
+
+      var duration = 700;
+      var startedAt = null;
+      el.textContent = '0';
+
+      window.requestAnimationFrame(function step(now) {
+        if (startedAt === null) startedAt = now;
+        var t = Math.min(1, (now - startedAt) / duration);
+        var eased = 1 - Math.pow(1 - t, 3);
+        el.textContent = String(Math.round(target * eased));
+        if (t < 1) window.requestAnimationFrame(step);
+        else el.textContent = String(target);
+      });
+    });
+
+    /* Cincin digambar penuh dulu, lalu dilepas ke nilai sebenarnya supaya
+       transisi CSS-nya punya titik awal. */
+    var ring = view.querySelector('.ring-fg');
+    if (ring) {
+      var finalOffset = ring.style.strokeDashoffset;
+      ring.style.strokeDashoffset = ring.style.strokeDasharray;
+      window.requestAnimationFrame(function () {
+        window.requestAnimationFrame(function () {
+          ring.style.strokeDashoffset = finalOffset;
+        });
+      });
+    }
+  }
+
   function setView(name, opts) {
     if (!dom.views[name]) return;
     currentView = name;
@@ -1381,6 +1455,8 @@
     el.classList.remove('is-entering');
     void el.offsetWidth;
     el.classList.add('is-entering');
+
+    animateEntrance();
 
     if (opts && opts.focus) {
       dom.main.focus({ preventScroll: true });
