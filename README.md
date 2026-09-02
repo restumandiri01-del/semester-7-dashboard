@@ -379,8 +379,16 @@ jangan warna per komponen.
 | Judul | Playfair Display | Serif display memberi kesan editorial — ini pembeda terbesar dari tampilan admin biasa |
 | Teks & UI | Plus Jakarta Sans | Ramah tapi profesional |
 | Angka & jam | Plus Jakarta Sans + `tabular-nums` | Dulu monospace, tapi itu membuat dashboard terasa seperti editor kode. `tabular-nums` menjaga digit tetap lurus tanpa kesan itu. Monospace kini hanya untuk `<code>` dan tuts `/` |
-| Hero band | Gradien + grain diagonal | Kesan "mahal" tanpa file gambar, jadi halaman tetap ringan |
-| Gerak | Layar pembuka, reveal saat scroll, angka menghitung naik, cincin progress | Terasa hidup tanpa memperlambat |
+| Hero band | Gradien radial + grain diagonal | Kesan "mahal" tanpa file gambar, jadi halaman tetap ringan |
+| Tekstur halaman | Grain fractalNoise di belakang konten | Menghapus kesan vektor datar. Sengaja di belakang, bukan di atas teks — lihat catatan kontras di bawah |
+| Kartu fokus | Baki + inti (permukaan bertingkat dua) | Radius dalam = radius luar − lebar baki, jadi lengkungnya konsentris. Hanya untuk kartu terpenting; kalau semua bertingkat, tidak ada yang menonjol |
+| Kartu biasa | Kilau tepi 1px + bayangan hangat | Membuat kartu terbaca sebagai permukaan yang ditimpa cahaya, bukan kotak putih bergaris abu |
+| Sorotan kursor | Cincin 1px yang menyala mengikuti kursor | Hanya di penunjuk presisi, mati saat reduced-motion |
+| Avatar | Squircle 13px | Avatar bundar adalah bawaan semua orang |
+| Chevron aksi cepat | Tombol di dalam tombol | Chevron duduk di sumur bundarnya sendiri, bukan menggantung di ujung kanan |
+| Gerak | Layar pembuka, reveal blur-ke-tajam saat scroll, angka menghitung naik, cincin progress | Terasa hidup tanpa memperlambat |
+| Easing | `--ease`, `--ease-out`, `--ease-spring` | Pegas hanya untuk hal yang harus terasa punya massa (tombol ditekan, ikon bergeser), bukan untuk perpindahan tampilan |
+| Lapisan | `--z-sticky` … `--z-modal` | Skala tetap, bukan angka yang dipilih ad hoc |
 | Spasi | Kelipatan 4 (`--space-1` … `--space-12`) | Ritme vertikal konsisten di semua tampilan |
 | Motion | 140–220ms | Cukup terasa, tidak memperlambat |
 
@@ -438,6 +446,24 @@ Bayangan, warna aksen, dan warna status masing-masing disetel ulang di
 - `--text-subtle` tidak boleh dipakai langsung di atas hero band: di sana
   kontrasnya hanya ~3,7–4,5:1. Pakai `--text-muted`, atau beri elemen itu latar
   opaque sendiri.
+- **Opasitas grain bukan pilihan selera.** Lapisan grain menggelapkan latar
+  tempat teks berdiri. Pada opasitas efektif 0.085, piksel grain tergelap
+  menjatuhkan `--text-subtle` ke **4,16:1** — di bawah ambang AA. Nilainya
+  ditahan di sekitar **0.035** untuk mode terang; diukur dari piksel yang
+  benar-benar dirender, latar tergelap menjadi `#f3f2ef` dan rasionya
+  **4,85:1**. Jangan naikkan tanpa mengukur ulang.
+- Grain dipasang pada `body::before` dengan `z-index: -1`, sehingga latar
+  halaman pindah ke `<html>` dan `<body>` menjadi transparan. Konsekuensinya:
+  siapa pun yang menaruh `background` pada `body` akan menutupi grain-nya.
+- **Sorotan kursor** membaca posisi lewat `requestAnimationFrame`, maksimal satu
+  kali per frame. `getBoundingClientRect` di dalam handler `pointermove` tanpa
+  pembatas itu akan memicu layout tiap gerakan tetikus.
+- **Manifest dipasang dari skrip inline**, bukan sebagai `<link>` statis. Di
+  `file://` peramban menolak mengambilnya karena CORS dan menulis peringatan
+  merah di konsol, padahal manifest memang tidak berlaku di luar http/https.
+- Animasi hover **tidak boleh** menyentuh `padding`, `width`, atau `height`.
+  `.quick-item` dulu menganimasikan `padding-left` dan itu memicu layout tiap
+  frame; sekarang isinya yang digeser dengan `transform`.
 - Elemen yang disembunyikan dengan atribut `hidden` **tidak boleh** punya
   `display` dari selektor kelas — `display: flex` pada `.palette-backdrop`
   mengalahkan `[hidden] { display: none }` bawaan peramban, dan dialognya jadi

@@ -15,7 +15,6 @@
 
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="manifest" href="manifest.json">
   <meta name="apple-mobile-web-app-title" content="Semester 7">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -42,6 +41,20 @@
         var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         if (!reduce) document.documentElement.classList.add('is-booting');
       } catch (e) { /* tanpa matchMedia, lewati saja layar pembukanya */ }
+
+      /* Manifest dipasang dari sini, bukan sebagai <link> statis. Saat halaman
+         dibuka lewat file://, peramban menolak mengambil manifest karena CORS
+         dan menuliskan peringatan merah di konsol — padahal manifest memang
+         tidak ada gunanya di luar http/https. Memasangnya secara bersyarat
+         menghilangkan peringatan itu tanpa mengurangi apa pun saat di-hosting. */
+      try {
+        if (location.protocol !== 'file:') {
+          var link = document.createElement('link');
+          link.rel = 'manifest';
+          link.href = 'manifest.json';
+          document.head.appendChild(link);
+        }
+      } catch (e) { /* tanpa manifest, aplikasi tetap berjalan penuh */ }
     })();
   </script>
 

@@ -376,6 +376,29 @@
     return best;
   }
 
+  /** Selisih hari kalender, bukan selisih 24 jam. */
+  function daysApart(target, from) {
+    var a = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+    var b = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+    return Math.round((a - b) / 86400000);
+  }
+
+  function whenLabel(target, from) {
+    var d = daysApart(target, from);
+    if (d <= 0) return 'hari ini';
+    if (d === 1) return 'besok';
+    return d + ' hari lagi';
+  }
+
+  /** Sesi nyata berikutnya, diurutkan menurut kemunculan sebenarnya. */
+  function upcomingSessions(now, limit) {
+    return realSessions().map(function (c) {
+      return { cls: c, at: nextOccurrence(c, now) };
+    }).sort(function (a, b) {
+      return a.at - b.at;
+    }).slice(0, limit);
+  }
+
   function formatCountdown(ms) {
     if (!isFinite(ms) || ms < 0) ms = 0;
     var total = Math.floor(ms / 1000);
@@ -648,10 +671,11 @@
 
     if (!live && !next) {
       return '<section class="focus-card" data-state="empty" aria-labelledby="focus-heading">' +
+        '<div class="focus-inner">' +
         '<p class="section-label" id="focus-heading">Kelas Berikutnya</p>' +
-        '<p class="focus-title" style="margin-top:10px">Tidak ada jadwal kuliah</p>' +
+        '<p class="focus-title is-standalone">Tidak ada jadwal kuliah</p>' +
         '<p class="focus-sub">Belum ada mata kuliah yang terdaftar di <code>data.js</code>.</p>' +
-        '</section>';
+        '</div></section>';
     }
 
     var cls = live || next.cls;
@@ -659,7 +683,8 @@
     var target = live ? occurrenceEnd(cls, now) : next.at;
     var cd = formatCountdown(target - now);
 
-    var html = '<section class="focus-card" data-state="' + state + '" aria-labelledby="focus-heading">';
+    var html = '<section class="focus-card" data-state="' + state + '" aria-labelledby="focus-heading">' +
+      '<div class="focus-inner">';
 
     var noun = cls.type === 'aktivitas' ? 'Kegiatan' : 'Kelas';
     html += '<div class="focus-top">' +
@@ -705,7 +730,7 @@
         'pukul ' + clock(following.start) + ' di ' + esc(following.room) + '</p>';
     }
 
-    html += '</section>';
+    html += '</div></section>';
     return html;
   }
 
@@ -763,6 +788,15 @@
         DAY_NAMES[today] + ' tidak memiliki jadwal pada Semester 7. Waktu ini tersedia untuk studi literatur atau bimbingan.');
     }
     html += '</section>';
+
+    /* Hari yang sepi meninggalkan kolom kiri kosong memanjang. Yang mengisinya
+       bukan hiasan, melainkan pertanyaan berikutnya yang memang wajar muncul:
+       "kalau bukan hari ini, lalu kapan?" Kartu ini hanya tampil ketika hari
+       ini memang lengang. */
+    if (todays.length < 3) {
+      html += guard('Menyusul', function () { return upcomingBlock(now); });
+    }
+
     html += '</div>';
 
     /* ---- Kolom samping ---- */
@@ -792,7 +826,7 @@
 
     /* Aksi cepat */
     html += '<section class="card quick-card" aria-labelledby="quick-heading">' +
-      '<div class="card-pad" style="padding-bottom:6px"><h2 id="quick-heading">Aksi Cepat</h2></div>' +
+      '<div class="card-pad quick-head"><h2 id="quick-heading">Aksi Cepat</h2></div>' +
       '<div class="quick-list">' +
       quickItem('today', 'clock', 'Hari Ini') +
       quickItem('jadwal', 'calendar', 'Jadwal Mingguan') +
@@ -811,6 +845,37 @@
 
     html += '</div></div>';
     return html;
+  }
+
+  /* Daftar sesi terdekat, tanpa mengulang yang sudah tampil di kartu fokus. */
+  function upcomingBlock(now) {
+    var live = liveClass(now);
+    var focused = live ? live.id : (nextClass(now) ? nextClass(now).cls.id : null);
+
+    var ahead = upcomingSessions(now, 5).filter(function (u) {
+      return u.cls.id !== focused;
+    }).slice(0, 3);
+
+    if (!ahead.length) return '';
+
+    return '<section class="card next-up" aria-labelledby="next-up-heading">' +
+      '<div class="card-pad next-up-head">' +
+      '<h2 id="next-up-heading">Menyusul</h2>' +
+      '<span class="count">' + ahead.length + ' kegiatan</span>' +
+      '</div>' +
+      '<ul class="next-up-list">' +
+      ahead.map(function (u) {
+        return '<li class="next-up-row">' +
+          '<span class="next-up-day">' + DAY_NAMES[u.cls.day].slice(0, 3) + '</span>' +
+          '<span class="next-up-body">' +
+          '<span class="next-up-name">' + esc(u.cls.name) + '</span>' +
+          '<span class="row-meta">' + clock(u.cls.start) + '–' + clock(u.cls.end) +
+          '<span class="dot-sep">·</span>' + esc(u.cls.room) + '</span>' +
+          '</span>' +
+          '<span class="next-up-when">' + esc(whenLabel(u.at, now)) + '</span>' +
+          '</li>';
+      }).join('') +
+      '</ul></section>';
   }
 
   /* Ringkasan kepanitiaan di dashboard — hanya agenda divisi sendiri yang
@@ -878,9 +943,14 @@
       '</div>';
   }
 
+  /* Chevron tidak berdiri telanjang di ujung kanan, melainkan duduk di dalam
+     wadah bundarnya sendiri. Detail kecil ini yang membedakan tombol yang
+     terasa dirancang dari tombol yang sekadar disusun. */
   function quickItem(target, iconName, label) {
     return '<button type="button" class="quick-item" data-quick="' + target + '">' +
-      icon(iconName) + '<span>' + esc(label) + '</span>' + icon('chevron', 'chev') + '</button>';
+      icon(iconName) + '<span class="quick-label">' + esc(label) + '</span>' +
+      '<span class="quick-well">' + icon('chevron', 'chev') + '</span>' +
+      '</button>';
   }
 
   function semesterProgressBlock(now) {
@@ -974,7 +1044,7 @@
       '</span></p></header>';
 
     /* Filter */
-    html += '<div class="filter-bar" style="margin-bottom:24px">' +
+    html += '<div class="filter-bar">' +
       '<div class="filter-row"><span class="section-label" id="filter-day-label">Hari</span>' +
       '<div class="chip-group" role="group" aria-labelledby="filter-day-label">' +
       chip('day', 'all', 'Semua', false) +
@@ -997,7 +1067,7 @@
     }
 
     if (shownDays.length) {
-      html += '<section aria-labelledby="week-heading" style="margin-bottom:28px">' +
+      html += '<section aria-labelledby="week-heading" class="section-gap">' +
         '<div class="section-head"><h2 id="week-heading">Jadwal Mingguan</h2>' +
         '<span class="count">' + visibleSessions.length + ' kegiatan</span></div>' +
         '<div class="week-grid">' +
@@ -1315,11 +1385,12 @@
 
     if (!live.length && !upcoming.length) {
       return '<section class="focus-card" data-state="empty" aria-labelledby="mf-focus-heading">' +
+        '<div class="focus-inner">' +
         '<p class="section-label" id="mf-focus-heading">Agenda ' + esc(MATHFEST.role || 'Kepanitiaan') + '</p>' +
-        '<p class="focus-title" style="margin-top:10px">Tidak ada agenda aktif</p>' +
+        '<p class="focus-title is-standalone">Tidak ada agenda aktif</p>' +
         '<p class="focus-sub">Semua agenda yang menjadi tanggung jawabmu sudah lewat, ' +
         'atau belum punya tanggal di timeline.</p>' +
-        '</section>';
+        '</div></section>';
     }
 
     var item = live.length ? live[0] : upcoming[0];
@@ -1331,6 +1402,7 @@
           : days + ' hari';
 
     var html = '<section class="focus-card" data-state="' + state + '" aria-labelledby="mf-focus-heading">' +
+      '<div class="focus-inner">' +
       '<div class="focus-top">' +
       '<p class="section-label" id="mf-focus-heading">' +
       (live.length ? 'Sedang Berjalan' : 'Agenda Berikutnya') + '</p>' +
@@ -1354,7 +1426,7 @@
     if (others > 0) {
       html += '<p class="focus-after">' + others + ' agenda divisimu lainnya masih menunggu.</p>';
     }
-    return html + '</section>';
+    return html + '</div></section>';
   }
 
   /* --------------------------------------------------------------------------
@@ -1480,12 +1552,12 @@
       mfFigure(mineNext, 'Akan Datang', false) +
       mfFigure(mine.length, 'Total Agenda Divisi', true) +
       '</div>' +
-      '<p class="section-hint" style="margin:16px 0 0">Dari ' + MF_ITEMS.length +
+      '<p class="section-hint is-after">Dari ' + MF_ITEMS.length +
       ' agenda pada timeline kepanitiaan, ' + mine.length +
       ' di antaranya menjadi tanggung jawab atau berkaitan langsung dengan ' +
       esc(MATHFEST.role || 'divisimu') + '.</p>' +
       (MATHFEST.divisionHead || MATHFEST.chair
-        ? '<div class="meta-grid" style="margin-top:16px">' +
+        ? '<div class="meta-grid is-spaced">' +
           metaItem('Jabatan', jabatan) +
           metaItem('PJ Divisi', MATHFEST.divisionHead) +
           metaItem('Ketua Pelaksana', MATHFEST.chair) +
@@ -1499,7 +1571,7 @@
     html += '</div></div>';
 
     /* Filter */
-    html += '<div class="filter-bar" style="margin:28px 0 24px">' +
+    html += '<div class="filter-bar is-spaced">' +
       '<div class="filter-row"><span class="section-label" id="mf-scope-label">Lingkup</span>' +
       '<div class="chip-group" role="group" aria-labelledby="mf-scope-label">' +
       chip('mfScope', 'saya', (MATHFEST.role || 'Divisi Saya'), false) +
@@ -1566,7 +1638,7 @@
 
     html += '<div class="result-list">' + results.map(function (r) {
       return '<article class="card result-item">' +
-        '<span style="color:var(--text-subtle);margin-top:2px">' + icon(r.icon) + '</span>' +
+        '<span class="result-icon">' + icon(r.icon) + '</span>' +
         '<div class="result-body">' +
         '<p class="result-title">' + highlight(r.title, query) + '</p>' +
         '<p class="row-meta">' + highlight(r.meta, query) + '</p>' +
@@ -1691,6 +1763,45 @@
     }, { rootMargin: '0px 0px -6% 0px', threshold: 0.04 });
 
     targets.forEach(function (el) { revealObserver.observe(el); });
+  }
+
+  /* --------------------------------------------------------------------------
+     SOROTAN MENGIKUTI KURSOR
+     ----------------------------------------------------------------------------
+     Tepi kartu menyala lembut di titik terdekat kursor. Efeknya halus dan hanya
+     terasa saat digerakkan — itulah yang membuat permukaannya terbaca sebagai
+     benda yang memantulkan cahaya.
+
+     Dibatasi ketat: hanya perangkat dengan penunjuk presisi (tidak ada gunanya
+     di layar sentuh), dimatikan pada reduced-motion, dan pembacaan posisi
+     dibatasi satu kali per frame lewat requestAnimationFrame supaya gerakan
+     tetikus tidak pernah memicu layout thrashing.
+     ------------------------------------------------------------------------ */
+  var SPOTLIGHT_TARGETS = '.card, .focus-card, .class-card, .activity-card, .guidance-card, .mf-item';
+
+  function setupSpotlight() {
+    var fine = false;
+    try { fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches; }
+    catch (e) { return; }
+    if (!fine || prefersReducedMotion()) return;
+
+    var queued = false;
+    var last = null;
+
+    document.addEventListener('pointermove', function (ev) {
+      last = ev;
+      if (queued) return;
+      queued = true;
+      window.requestAnimationFrame(function () {
+        queued = false;
+        if (!last || !last.target || !last.target.closest) return;
+        var el = last.target.closest(SPOTLIGHT_TARGETS);
+        if (!el) return;
+        var box = el.getBoundingClientRect();
+        el.style.setProperty('--mx', (last.clientX - box.left).toFixed(1) + 'px');
+        el.style.setProperty('--my', (last.clientY - box.top).toFixed(1) + 'px');
+      });
+    }, { passive: true });
   }
 
   function prefersReducedMotion() {
@@ -2546,6 +2657,7 @@
     buildTabs();
     buildPalette();
     bindEvents();
+    setupSpotlight();
     setupInstallPrompt();
     registerServiceWorker();
     showLoadingState();
