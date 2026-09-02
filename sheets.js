@@ -191,24 +191,33 @@
 
   /** Tab "pengaturan" berisi pasangan kunci/nilai; diubah jadi peta datar. */
   function settingsMap(rows) {
-    var map = {};
-    var order = [];
+    var map = {};   // kunci huruf kecil → nilai, untuk pencarian yang eksplisit
+    var raw = [];   // kunci apa adanya, supaya huruf besar-kecil tidak hilang
+
     toObjects(rows).forEach(function (r) {
       var key = txt(r.kunci || r.key);
       if (!key) return;
-      map[key.toLowerCase()] = r.nilai === undefined ? r.value : r.nilai;
-      order.push(key.toLowerCase());
+      var value = r.nilai === undefined ? r.value : r.nilai;
+      map[key.toLowerCase()] = value;
+      raw.push({ key: key, value: value });
     });
-    map.__order = order;
+
+    map.__raw = raw;
     return map;
   }
 
+  /* Mengambil semua kunci berawalan `prefix`. Pencocokan awalannya tidak
+     membedakan huruf besar-kecil, tetapi sisa kuncinya dikembalikan apa adanya
+     supaya nama seperti "divisionHead" tidak berubah jadi "divisionhead". */
   function prefixed(map, prefix) {
     var out = {};
-    (map.__order || []).forEach(function (key) {
-      if (key.indexOf(prefix) !== 0) return;
-      out[key.slice(prefix.length)] = txt(map[key]);
+    var lower = prefix.toLowerCase();
+
+    (map.__raw || []).forEach(function (entry) {
+      if (entry.key.toLowerCase().indexOf(lower) !== 0) return;
+      out[entry.key.slice(prefix.length)] = txt(entry.value);
     });
+
     return out;
   }
 
@@ -231,12 +240,13 @@
       endDate: isoDate(map['semester.enddate']) || local.semester.endDate
     };
 
-    var mathfest = {
-      name: txt(map['mathfest.name']) || local.mathfestConfig.name,
-      organization: txt(map['mathfest.organization']) || local.mathfestConfig.organization,
-      role: txt(map['mathfest.role']) || local.mathfestConfig.role,
-      division: txt(map['mathfest.division']) || local.mathfestConfig.division
-    };
+    /* Semua kunci berawalan "mathfest." ikut terbawa, jadi menambah kolom baru
+       di spreadsheet (misalnya mathfest.position) tidak perlu mengubah kode. */
+    var mathfest = Object.assign({}, local.mathfestConfig);
+    var fromSheet = prefixed(map, 'mathfest.');
+    Object.keys(fromSheet).forEach(function (key) {
+      if (fromSheet[key] !== null) mathfest[key] = fromSheet[key];
+    });
 
     var categories = prefixed(map, 'kategori.');
     var phaseMap = prefixed(map, 'fase.');

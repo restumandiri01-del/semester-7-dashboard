@@ -1265,9 +1265,11 @@
     var mineLive = mine.filter(function (it) { return mfStatus(it, now) === 'live'; }).length;
     var mineNext = mine.filter(function (it) { return mfStatus(it, now) === 'upcoming'; }).length;
 
+    var jabatan = [MATHFEST.position, MATHFEST.role].filter(Boolean).join(' ');
+
     var html = '<header class="greeting"><h1>' + esc(title) + '</h1>' +
       '<p class="greeting-meta"><span>' +
-      esc([MATHFEST.role, MATHFEST.organization].filter(Boolean).join(' · ')) +
+      esc([jabatan, MATHFEST.organization].filter(Boolean).join(' · ')) +
       '</span></p></header>';
 
     html += '<div class="dash-grid"><div class="dash-col">';
@@ -1286,6 +1288,14 @@
       ' agenda pada timeline kepanitiaan, ' + mine.length +
       ' di antaranya menjadi tanggung jawab atau berkaitan langsung dengan ' +
       esc(MATHFEST.role || 'divisimu') + '.</p>' +
+      (MATHFEST.divisionHead || MATHFEST.chair
+        ? '<div class="meta-grid" style="margin-top:16px">' +
+          metaItem('Jabatan', jabatan) +
+          metaItem('PJ Divisi', MATHFEST.divisionHead) +
+          metaItem('Ketua Pelaksana', MATHFEST.chair) +
+          metaItem('Steering Committee', MATHFEST.steeringCommittee) +
+          '</div>'
+        : '') +
       '</section>';
     html += '</div></div>';
 

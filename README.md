@@ -225,14 +225,32 @@ Tandai `critical: true` pada agenda yang tidak boleh ditabrak kegiatan lain
 Tab **Mathfest** menampilkan seluruh timeline kepanitiaan, difilter secara
 default ke agenda divisi sendiri.
 
+Disesuaikan dengan *Pengumuman Divisi Panitia Mathfest 2026*.
+
 ```js
 const mathfestConfig = {
   name: 'Mathfest 2026',
   organization: 'HIMATIKA',
-  role: 'Divisi Kompetisi',
+  role: 'Divisi Kompetisi',              // dipakai sebagai label filter — jaga tetap pendek
   division: 'kompetisi',
+  position: 'Anggota',                   // jabatan sebenarnya
+  divisionHead: 'Risa Namira Sundari',   // PJ Divisi Kompetisi
+  chair: 'Fitri Fhaturrahma Malik',      // Ketua Pelaksana
+  steeringCommittee: 'Bayu Wiji Santoso',
+  generalHead: 'Regana Fikri Adiba',     // Penanggung Jawab Umum
 };
 ```
+
+`role` sengaja dibiarkan pendek karena dipakai sebagai label chip filter
+"Lingkup"; jabatan lengkap disimpan terpisah di `position` dan ditampilkan
+sebagai "Anggota Divisi Kompetisi".
+
+Menambah kunci baru berawalan `mathfest.` di tab `pengaturan` otomatis terbawa
+tanpa perlu mengubah kode.
+
+**Catatan sumber:** timeline kepanitiaan menulis divisi media kreatif sebagai
+"Medkraft", sedangkan pengumuman resmi menulis "Medkraf". Data mengikuti
+pengumuman resmi.
 
 Tiap agenda:
 

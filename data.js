@@ -249,11 +249,19 @@ const categoryLabels = {
    start/end : 'YYYY-MM-DD'. Boleh null bila timeline tidak menyebut tanggal —
                isi `when` sebagai gantinya supaya tetap terbaca.
    -------------------------------------------------------------------------- */
+/* Disesuaikan dengan "Pengumuman Divisi Panitia Mathfest 2026".
+   role dipakai sebagai label lingkup filter, jadi sengaja dibiarkan pendek;
+   position menyimpan jabatan sebenarnya. */
 const mathfestConfig = {
   name: 'Mathfest 2026',
   organization: 'HIMATIKA',
   role: 'Divisi Kompetisi',
   division: 'kompetisi',
+  position: 'Anggota',
+  divisionHead: 'Risa Namira Sundari',
+  chair: 'Fitri Fhaturrahma Malik',        // Ketua Pelaksana
+  steeringCommittee: 'Bayu Wiji Santoso',  // "SC" pada kolom penanggung jawab
+  generalHead: 'Regana Fikri Adiba',       // Penanggung Jawab Umum
 };
 
 const mathfestPhases = [
@@ -270,7 +278,7 @@ const mathfestTimeline = [
     id: 'juni-tema', phase: 'juni',
     agenda: 'Fiksasi Tema dan Design', sub: null,
     start: '2026-06-06', end: '2026-06-30', when: null, place: null,
-    needs: 'Color palette dll', pj: 'SC, OC, & Medkraft', relevance: null,
+    needs: 'Color palette dll', pj: 'SC, OC, & Medkraf', relevance: null,
   },
   {
     id: 'juni-recruitment-pengurus', phase: 'juni',
@@ -316,43 +324,43 @@ const mathfestTimeline = [
     agenda: 'Open Recruitment', sub: 'Pendaftaran Non Pengurus',
     start: '2026-07-20', end: '2026-07-24', when: null, place: null,
     needs: 'Guide Book, Konten, Design Pamflet, Gform, Surat Kesediaan, Surat Komitmen',
-    pj: 'Sekretaris & Medkraft', relevance: null,
+    pj: 'Sekretaris & Medkraf', relevance: null,
   },
   {
     id: 'ja-oprec-penambahan', phase: 'juli-agustus',
     agenda: 'Open Recruitment', sub: 'Penambahan Waktu',
     start: '2026-07-25', end: '2026-07-26', when: null, place: null,
-    needs: null, pj: 'Sekretaris & Medkraft', relevance: null,
+    needs: null, pj: 'Sekretaris & Medkraf', relevance: null,
   },
   {
     id: 'ja-oprec-verifikasi', phase: 'juli-agustus',
     agenda: 'Open Recruitment', sub: 'Verifikasi Berkas + Jadwal Interview',
     start: '2026-07-27', end: '2026-07-27', when: null, place: null,
-    needs: null, pj: 'Sekretaris & Medkraft', relevance: null,
+    needs: null, pj: 'Sekretaris & Medkraf', relevance: null,
   },
   {
     id: 'ja-oprec-interview-exoff', phase: 'juli-agustus',
     agenda: 'Open Recruitment', sub: 'Interview Ex-Officio',
     start: '2026-07-27', end: '2026-07-29', when: null, place: null,
-    needs: null, pj: 'Sekretaris & Medkraft', relevance: null,
+    needs: null, pj: 'Sekretaris & Medkraf', relevance: null,
   },
   {
     id: 'ja-oprec-interview-kadiv', phase: 'juli-agustus',
     agenda: 'Open Recruitment', sub: 'Interview Kadiv',
     start: '2026-07-27', end: '2026-07-31', when: null, place: null,
-    needs: null, pj: 'Sekretaris & Medkraft', relevance: null,
+    needs: null, pj: 'Sekretaris & Medkraf', relevance: null,
   },
   {
     id: 'ja-oprec-plotingan', phase: 'juli-agustus',
     agenda: 'Open Recruitment', sub: 'Plotingan',
     start: '2026-08-01', end: '2026-08-02', when: null, place: null,
-    needs: null, pj: 'Sekretaris & Medkraft', relevance: null,
+    needs: null, pj: 'Sekretaris & Medkraf', relevance: null,
   },
   {
     id: 'ja-oprec-pengumuman', phase: 'juli-agustus',
     agenda: 'Open Recruitment', sub: 'Pengumuman',
     start: '2026-08-03', end: '2026-08-04', when: null, place: null,
-    needs: null, pj: 'Sekretaris & Medkraft', relevance: null,
+    needs: null, pj: 'Sekretaris & Medkraf', relevance: null,
   },
 
   /* ---- September 2026 ---- */
@@ -592,7 +600,7 @@ const mathfestTimeline = [
     id: 'nov-take-konten', phase: 'november-desember',
     agenda: 'Take Konten', sub: 'PPMTK',
     start: '2026-11-18', end: '2026-11-18', when: null, place: 'Tugu Kujang',
-    needs: null, pj: 'Panitia Kegiatan, Medkraft, Kompetisi', relevance: 'utama',
+    needs: null, pj: 'Panitia Kegiatan, Medkraf, Kompetisi', relevance: 'utama',
   },
   {
     id: 'nov-komet', phase: 'november-desember',
