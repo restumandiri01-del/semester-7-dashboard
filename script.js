@@ -35,6 +35,11 @@
   var SESSIONS = [];
   var LOAD = { scheduled: 0, extra: 0, total: 0, breakdown: [] };
   var INDEX = [];
+  /* Versi aplikasi. Semantic versioning: naikkan MINOR untuk fitur baru yang
+     tidak merusak apa pun, PATCH untuk perbaikan. Angka ini tampil di panel
+     Tentang supaya kalau ada yang aneh, jelas versi mana yang sedang dilihat. */
+  var APP_VERSION = '1.0.0';
+
   var DATA_SOURCE = 'lokal';
   var DATA_NOTES = [];
   var DATA_SAVED_AT = null;   /* kapan data yang tampil diambil dari Sheets */
@@ -2213,6 +2218,13 @@
       cmds.push({ icon: 'inbox', title: 'Perbarui data dari Google Sheets', hint: 'Data', run: refreshData });
     }
 
+    cmds.push({
+      icon: 'info',
+      title: 'Tentang aplikasi ini',
+      hint: 'Bantuan',
+      run: openAbout
+    });
+
     return cmds;
   }
 
@@ -2328,6 +2340,153 @@
     }
 
     palette.restoreTo = null;
+  }
+
+  /* ==========================================================================
+     16c. PANEL TENTANG
+     ----------------------------------------------------------------------------
+     Satu tempat untuk hal-hal yang perlu ada tetapi tidak boleh menyita ruang
+     di antarmuka utama: versi, dari mana data yang sedang tampil berasal, daftar
+     pintasan papan ketik, dan tombol menghapus salinan lokal.
+
+     Memakai <dialog> bawaan peramban, bukan div buatan sendiri. Dengan begitu
+     penguncian fokus, tombol Escape, dan semantik dialog datang dari peramban
+     dan tidak perlu ditiru ulang dengan JavaScript yang bisa salah.
+     ======================================================================== */
+  var aboutDialog = null;
+
+  var SHORTCUTS = [
+    ['Ctrl / ⌘ + K', 'Buka perintah cepat'],
+    ['/', 'Fokus ke kolom pencarian'],
+    ['Esc', 'Tutup perintah cepat, atau bersihkan pencarian'],
+    ['↑ ↓', 'Pilih di perintah cepat'],
+    ['Enter', 'Jalankan perintah yang terpilih'],
+    ['Tab', 'Berpindah antarelemen']
+  ];
+
+  /* Menjelaskan dengan jujur apa yang sedang ditampilkan, termasuk mana yang
+     tersimpan di perangkat ini dan mana yang datang dari luar. */
+  function aboutSourceRows() {
+    var status = sourceStatus();
+    var rows = [
+      ['Status data', status.text],
+      ['Sumber utama', hasSheets() ? 'Google Sheets' : 'data.js (dikirim bersama situs)'],
+      ['Cadangan terakhir', DATA_SAVED_AT
+        ? relativeTime(DATA_SAVED_AT, Date.now()) + ' · tersimpan di peramban ini'
+        : 'Belum ada salinan tersimpan']
+    ];
+    if (DATA_NOTES.length) {
+      rows.push(['Catatan teknis', DATA_NOTES.length + ' catatan tercatat di konsol peramban']);
+    }
+    return rows;
+  }
+
+  function hasSheets() {
+    try { return !!(window.AcademicDataSource && window.AcademicDataSource.isConfigured()); }
+    catch (e) { return false; }
+  }
+
+  function aboutRow(label, val) {
+    return '<div class="about-row"><dt>' + esc(label) + '</dt><dd>' + esc(val) + '</dd></div>';
+  }
+
+  function renderAbout() {
+    var body = aboutDialog.querySelector('.about-body');
+
+    var html =
+      '<dl class="about-list">' +
+      aboutRow('Versi', APP_VERSION) +
+      aboutRow('Pemilik', PROFILE.name + ' · ' + PROFILE.nim) +
+      aboutRow('Semester', 'Semester ' + PROFILE.semester + ' · ' + PROFILE.academicYear) +
+      aboutSourceRows().map(function (r) { return aboutRow(r[0], r[1]); }).join('') +
+      '</dl>';
+
+    html += '<h3 class="about-heading">Pintasan papan ketik</h3>' +
+      '<dl class="about-list about-keys">' +
+      SHORTCUTS.map(function (k) {
+        return '<div class="about-row"><dt><kbd>' + esc(k[0]) + '</kbd></dt>' +
+          '<dd>' + esc(k[1]) + '</dd></div>';
+      }).join('') +
+      '</dl>';
+
+    /* Tombol hanya ditawarkan kalau memang ada yang bisa dihapus. */
+    var cached = false;
+    try { cached = !!(window.AcademicDataSource && window.AcademicDataSource.hasCache()); }
+    catch (e) { cached = false; }
+
+    html += '<h3 class="about-heading">Data tersimpan di perangkat ini</h3>' +
+      '<p class="about-note">Hanya dua hal yang disimpan peramban: pilihan tema, ' +
+      'dan salinan terakhir data akademik supaya dashboard tetap terbuka tanpa jaringan. ' +
+      'Tidak ada yang dikirim ke mana pun.</p>';
+
+    if (cached) {
+      html += '<button type="button" class="about-danger" id="about-clear">' +
+        'Hapus salinan tersimpan</button>' +
+        '<p class="about-note is-quiet">Data di Google Sheets tidak ikut terhapus. ' +
+        'Salinan akan dibuat lagi pada sinkronisasi berikutnya.</p>';
+    } else {
+      html += '<p class="about-note is-quiet">Belum ada salinan data yang tersimpan.</p>';
+    }
+
+    body.innerHTML = html;
+  }
+
+  function openAbout() {
+    if (!aboutDialog) return;
+    renderAbout();
+    if (typeof aboutDialog.showModal === 'function') aboutDialog.showModal();
+    else aboutDialog.setAttribute('open', '');   /* peramban lama: tetap terbaca */
+  }
+
+  function closeAbout() {
+    if (!aboutDialog) return;
+    if (typeof aboutDialog.close === 'function' && aboutDialog.open) aboutDialog.close();
+    else aboutDialog.removeAttribute('open');
+  }
+
+  function buildAbout() {
+    var dlg = document.createElement('dialog');
+    dlg.className = 'about';
+    dlg.id = 'about';
+    dlg.setAttribute('aria-labelledby', 'about-title');
+    dlg.innerHTML =
+      '<div class="about-head">' +
+      '<h2 id="about-title">Academic OS</h2>' +
+      '<button type="button" class="about-close" id="about-close" aria-label="Tutup">' +
+      '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.6" stroke-linecap="round" aria-hidden="true">' +
+      '<path d="m6.5 6.5 11 11M17.5 6.5l-11 11"></path></svg>' +
+      '</button>' +
+      '</div>' +
+      '<div class="about-body"></div>';
+
+    document.body.appendChild(dlg);
+    aboutDialog = dlg;
+
+    dlg.addEventListener('click', function (ev) {
+      if (ev.target.closest('#about-close')) { closeAbout(); return; }
+
+      if (ev.target.closest('#about-clear')) {
+        var ok = false;
+        try { ok = !!(window.AcademicDataSource && window.AcademicDataSource.clearCache()); }
+        catch (e) { ok = false; }
+        if (ok && dom.liveRegion) dom.liveRegion.textContent = 'Salinan data tersimpan sudah dihapus.';
+        renderAbout();
+        return;
+      }
+
+      /* Klik pada area gelap di luar panel. Pada <dialog>, target klik itu
+         adalah dialog itu sendiri, bukan isinya. */
+      if (ev.target === dlg) closeAbout();
+    });
+
+    /* Escape ditangani sendiri, bukan diserahkan sepenuhnya ke peramban.
+       showModal() memang menutup dengan Escape, tetapi jalur cadangan untuk
+       peramban tanpa <dialog> memakai atribut `open` biasa — dan di sana tidak
+       ada yang mendengarkan Escape sama sekali. */
+    dlg.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') { ev.preventDefault(); closeAbout(); }
+    });
   }
 
   function buildPalette() {
@@ -2487,6 +2646,12 @@
       dom.paletteButton.addEventListener('click', function () { paletteOpen(); });
     }
 
+    if (dom.versionButton) {
+      dom.versionButton.textContent = 'v' + APP_VERSION;
+      dom.versionButton.setAttribute('aria-label', 'Tentang aplikasi, versi ' + APP_VERSION);
+      dom.versionButton.addEventListener('click', openAbout);
+    }
+
     /* Tombol back/forward peramban dan tautan langsung ke #mathfest */
     window.addEventListener('hashchange', onHashChange);
 
@@ -2641,6 +2806,7 @@
       searchKbd: document.querySelector('.search-kbd'),
       paletteButton: document.getElementById('palette-button'),
       installButton: document.getElementById('install-button'),
+      versionButton: document.getElementById('version-button'),
       liveRegion: document.getElementById('live-region'),
       views: {
         dashboard: document.getElementById('view-dashboard'),
@@ -2656,6 +2822,7 @@
     setupIntro();
     buildTabs();
     buildPalette();
+    buildAbout();
     bindEvents();
     setupSpotlight();
     setupInstallPrompt();

@@ -4,6 +4,9 @@ Dashboard akademik pribadi untuk Restu Mandiri (1237010016 · Matematika · Seme
 
 HTML + CSS + JavaScript murni. Tanpa build step, tanpa bundler, tanpa framework.
 
+Audit per area, matriks QA, dan changelog ada di **[AUDIT.md](AUDIT.md)** —
+termasuk daftar jujur hal apa saja yang belum diuji.
+
 Satu-satunya sumber daya eksternal adalah font Plus Jakarta Sans dari Google
 Fonts. Tanpa koneksi internet aplikasi tetap berjalan penuh — font otomatis
 turun ke stack sistem yang sudah disiapkan di `style.css`.
@@ -34,7 +37,15 @@ favicon.svg         ikon tab peramban
 icon-192.png        ikon PWA
 icon-512.png        ikon PWA (termasuk maskable)
 apple-touch-icon.png ikon layar utama iOS
+
+AUDIT.md            tabel audit per area, matriks QA, dan changelog
+tools/              skrip bantu, tidak ikut dimuat situs
+sheets-template/    enam CSV siap impor ke Google Sheets
 ```
+
+Yang benar-benar dikirim ke peramban hanya berkas di akar. `tools/` dan
+`sheets-template/` ada untuk menyiapkan spreadsheet, bukan untuk dijalankan
+situsnya.
 
 ## Dari mana datanya?
 
@@ -70,8 +81,30 @@ peramban, lengkap dengan nomor barisnya di spreadsheet.
 
 ### Menyiapkan Google Sheets
 
-Buat satu spreadsheet dengan **6 tab**. Baris pertama tiap tab wajib berisi nama
-kolom persis seperti berikut:
+**Jalan cepat.** Berkas di `sheets-template/` sudah berisi data yang sama persis
+dengan `data.js`, dalam format yang siap diimpor. Tidak perlu mengetik ulang 56
+baris timeline Mathfest.
+
+1. Buat spreadsheet baru
+2. Untuk tiap berkas di `sheets-template/`: **File → Import → Upload**, pilih
+   **Insert new sheet(s)**, lalu ganti nama tabnya sesuai nama berkas
+   (`pengaturan`, `jadwal`, `aktivitas`, `bimbingan`, `kalender`, `mathfest`)
+3. **File → Share → Publish to web** → pilih satu tab → **Comma-separated values
+   (.csv)** → salin tautannya
+4. Ulangi untuk keenam tab, tempel keenam tautan ke `SHEET_CSV_URLS` di
+   `sheets.js`
+
+Kalau `data.js` berubah dan CSV-nya ingin disegarkan:
+
+```
+node tools/export-sheets-csv.js
+```
+
+Skrip itu membaca `data.js` langsung, jadi isinya tidak mungkin melenceng. Tanpa
+dependensi apa pun — hanya modul bawaan Node.
+
+**Jalan manual.** Kalau ingin menyusun sendiri, buat spreadsheet dengan **6 tab**.
+Baris pertama tiap tab wajib berisi nama kolom persis seperti berikut:
 
 | Tab | Kolom |
 | --- | --- |
@@ -355,7 +388,9 @@ Tiap agenda:
 | `Tab` | Navigasi keyboard penuh dengan focus ring yang terlihat |
 
 Di layar sentuh, perintah cepat punya tombolnya sendiri di header — pintasan
-papan ketik tidak pernah menjadi satu-satunya jalan ke sebuah fitur.
+papan ketik tidak pernah menjadi satu-satunya jalan ke sebuah fitur. Daftar
+pintasan ini juga tersedia di dalam aplikasi: klik nomor versi di footer, atau
+cari "Tentang" di perintah cepat.
 
 Setiap tampilan punya alamatnya sendiri, jadi memuat ulang tetap mendarat di
 tempat yang sama dan tombol back peramban bekerja seperti biasa:
@@ -398,6 +433,16 @@ Bayangan, warna aksen, dan warna status masing-masing disetel ulang di
 
 ## Catatan teknis
 
+- **Panel Tentang** (nomor versi di footer) menampilkan versi, dari mana data
+  yang sedang tampil berasal, umur salinan tersimpan, referensi pintasan, dan
+  tombol menghapus salinan lokal. Memakai `<dialog>` bawaan peramban, sehingga
+  penguncian fokus dan tombol Escape datang dari peramban — bukan ditiru ulang
+  dengan JavaScript yang bisa salah.
+- **Versi** memakai semantic versioning, disimpan sebagai `APP_VERSION` di
+  `script.js`. Naikkan MINOR untuk fitur baru yang tidak merusak apa pun, PATCH
+  untuk perbaikan.
+- Hanya dua hal yang disimpan peramban: pilihan tema, dan salinan terakhir data
+  akademik. Tidak ada yang dikirim ke mana pun.
 - Tema mengikuti preferensi sistem sampai kamu memilih sendiri; pilihan disimpan di `localStorage`.
 - Satu `setInterval` untuk seluruh aplikasi, otomatis berhenti saat tab tidak terlihat.
 - Render ulang hanya terjadi saat status jadwal berubah, bukan tiap detik.

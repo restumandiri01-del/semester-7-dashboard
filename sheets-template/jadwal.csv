@@ -1,0 +1,6 @@
+id,name,day,start,end,sks,room,lecturer,kind,category,formality
+statistika-non-parametrik,Statistika Non Parametrik,1,09:30,12:00,3,302,Ibu Asti,Perkuliahan Reguler,perkuliahan,
+metode-survei-sampling,Metode Survei Sampling,2,07:00,09:30,3,Lab Stat,Ibu Asti,Perkuliahan Reguler,perkuliahan,
+analisis-real,Analisis Real,4,12:40,15:10,3,Lab Kom,Ibu Essy,Perkuliahan Reguler,perkuliahan,
+obligasi-dan-sukuk,Obligasi dan Sukuk,4,15:30,18:00,3,301,Pak Rudi,Perkuliahan Reguler,perkuliahan,
+tk-kombinatorika-2,TK Kombinatorika 2,5,07:00,09:30,3,302,Bu Risma,Perkuliahan Reguler,perkuliahan,

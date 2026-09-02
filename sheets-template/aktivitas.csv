@@ -1,0 +1,5 @@
+id,name,code,sks,category,group,status,tone,topic,supervisor,classgroup,progress,deadline,note,session_day,session_start,session_end,session_room,session_lecturer,session_formality
+studi-literatur,Studi Literatur,70101024,2,studi-literatur,non-perkuliahan,Berjalan,success,Studi Literatur Keuangan,"Fahrudin Muhtarulloh, S.Si., M.Sc.",J,,,,6,10:20,12:00,Lab MIK,"Fahrudin Muhtarulloh, S.Si., M.Sc.",ya
+seminar-studi-literatur,Seminar Studi Literatur,70101025,1,seminar,non-perkuliahan,Belum dijadwalkan,warning,,,,,,,,,,,,
+skripsi-1,Skripsi 1,,2,skripsi,non-perkuliahan,Aktivitas Skripsi,neutral,,,,,,,,,,,,
+kkn,KKN,,2,kkn,formalitas,Administratif,muted,,,,,,Kegiatan telah dilaksanakan pada Semester 6. Semester 7 berkaitan dengan formalitas/penginputan nilai.,,,,,,

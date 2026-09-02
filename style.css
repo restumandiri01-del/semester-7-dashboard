@@ -2290,6 +2290,166 @@ html.has-palette { overflow: hidden; }
 .result-icon { color: var(--text-subtle); margin-top: 2px; }
 
 /* ---------------------------------------------------------------------------
+   9d. PANEL TENTANG
+   ----------------------------------------------------------------------------
+   Memakai <dialog> bawaan. Elemen ini dirender di top layer peramban, jadi
+   tidak butuh z-index sama sekali dan mustahil tertutup elemen lain — salah
+   satu alasan memilihnya daripada div buatan sendiri.
+   ------------------------------------------------------------------------- */
+.about {
+  width: min(520px, calc(100vw - 2 * var(--space-5)));
+  max-height: min(80vh, 680px);
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.about::backdrop {
+  background: rgba(26, 28, 27, 0.44);
+  backdrop-filter: blur(3px);
+}
+[data-theme="dark"] .about::backdrop { background: rgba(0, 0, 0, 0.62); }
+
+.about[open] { animation: palette-rise 0.24s var(--ease-out) both; }
+
+.about-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-5) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.about-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.about-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  /* 36px: di atas ambang 24px WCAG dan nyaman untuk jari. */
+  width: 36px; height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
+}
+.about-close:hover { background: var(--surface-secondary); color: var(--text); }
+
+.about-body {
+  padding: var(--space-5);
+  overflow-y: auto;
+  max-height: calc(min(80vh, 680px) - 76px);
+}
+
+.about-list { margin: 0; }
+.about-row {
+  display: flex;
+  gap: var(--space-4);
+  align-items: baseline;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8125rem;
+}
+.about-row:last-child { border-bottom: 0; }
+.about-row dt {
+  flex: none;
+  width: 132px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-subtle);
+}
+.about-row dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.about-keys .about-row dt { width: 132px; }
+.about-keys kbd {
+  display: inline-block;
+  padding: 3px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-secondary);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1.3;
+}
+
+.about-heading {
+  margin: var(--space-6) 0 var(--space-2);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+.about-note {
+  margin: 0 0 var(--space-3);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  text-wrap: pretty;
+}
+.about-note.is-quiet { margin-top: var(--space-2); margin-bottom: 0; font-size: 0.75rem; }
+
+/* Tindakan merusak: dibuat jelas tetapi tidak berteriak. Warnanya baru penuh
+   saat benar-benar disentuh. */
+.about-danger {
+  min-height: 38px;
+  padding: 8px 16px;
+  border: 1px solid var(--border-control);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--danger);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+.about-danger:hover {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+
+/* Nomor versi di footer */
+.version-button {
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--r-full);
+  background: none;
+  color: var(--text-subtle);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: color 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+.version-button:hover { color: var(--text-muted); border-color: var(--border); }
+
+@media (max-width: 640px) {
+  .about { width: calc(100vw - 2 * var(--space-4)); }
+  .about-row { flex-direction: column; gap: 3px; }
+  .about-row dt { width: auto; }
+}
+
+/* ---------------------------------------------------------------------------
    10. FOOTER
    ------------------------------------------------------------------------- */
 .app-footer {

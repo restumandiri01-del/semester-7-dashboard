@@ -1,0 +1,57 @@
+id,phase,agenda,sub,start,end,when,place,needs,pj,relevance
+juni-tema,juni,Fiksasi Tema dan Design,,2026-06-06,2026-06-30,,,Color palette dll,"SC, OC, & Medkraf",
+juni-recruitment-pengurus,juni,Recruitment Pengurus,Pendaftaran Pengurus Himatika,2026-06-22,2026-06-30,,,Gform,Sekretaris,
+juni-rab-internal,juni,RAB,Internal,2026-06-22,2026-06-30,,,Spreadsheet RAB,OC & Bendahara,
+juni-rab-eksternal,juni,RAB,Eksternal (Proposal Sponsorship),2026-06-22,2026-06-30,,,Penyesuaian RAB,OC & Bendahara,
+juni-proposal-sponsor,juni,Proposal Sponsorship,Pembuatan Proposal,2026-06-22,2026-06-30,,,Proposal,Sekretaris,
+juni-proposal-ttd,juni,Proposal Sponsorship,TTD,2026-06-30,2026-07-19,,,TTD sampai Warek,Sekretaris,
+ja-fiksasi-tempat,juli-agustus,Fiksasi Tempat,"Opening, Closing dan Komet",2026-07-01,2026-08-31,,Anwar dan Abjan,"Kepastian tempat untuk Opening, Closing dan Komet","SC, Sekre, PR, Fahmi",terkait
+ja-oprec-pendaftaran,juli-agustus,Open Recruitment,Pendaftaran Non Pengurus,2026-07-20,2026-07-24,,,"Guide Book, Konten, Design Pamflet, Gform, Surat Kesediaan, Surat Komitmen",Sekretaris & Medkraf,
+ja-oprec-penambahan,juli-agustus,Open Recruitment,Penambahan Waktu,2026-07-25,2026-07-26,,,,Sekretaris & Medkraf,
+ja-oprec-verifikasi,juli-agustus,Open Recruitment,Verifikasi Berkas + Jadwal Interview,2026-07-27,2026-07-27,,,,Sekretaris & Medkraf,
+ja-oprec-interview-exoff,juli-agustus,Open Recruitment,Interview Ex-Officio,2026-07-27,2026-07-29,,,,Sekretaris & Medkraf,
+ja-oprec-interview-kadiv,juli-agustus,Open Recruitment,Interview Kadiv,2026-07-27,2026-07-31,,,,Sekretaris & Medkraf,
+ja-oprec-plotingan,juli-agustus,Open Recruitment,Plotingan,2026-08-01,2026-08-02,,,,Sekretaris & Medkraf,
+ja-oprec-pengumuman,juli-agustus,Open Recruitment,Pengumuman,2026-08-03,2026-08-04,,,,Sekretaris & Medkraf,
+sep-guidebook-lomba,september,Guidebook,Pendaftaran & Peraturan Lomba (Himchamp & Komet),2026-09-01,2026-09-05,,,Guidebook Pendaftaran & Lomba,"Sekretaris, Bendum, Kompetisi",utama
+sep-pendaftaran-lomba,september,Pendaftaran Lomba,Komet & Himchamp,2026-09-01,2026-09-30,,,Link G-Form Pendaftaran & Publikasi Pendaftaran,Sekretaris dan Panitia,utama
+sep-sponsor-list,september,Proposal Sponsorship,Menyusun List Sponsor,2026-09-01,2026-09-06,,,List Sponsor,Daspro & Humas,
+sep-sponsor-online,september,Proposal Sponsorship,Penyebaran Proposal Online,2026-09-06,2026-09-30,,,File Proposal Final,Daspro & Humas,
+sep-sponsor-offline,september,Proposal Sponsorship,Penyebaran Offline,2026-09-15,2026-09-30,,,Print-out proposal sponsorship & surat pengantar sponsor,Humas,
+sep-proposal-kegiatan,september,Proposal Kegiatan,Pembuatan Proposal Himchamp & Komet,2026-09-01,2026-09-30,,,Proposal Kegiatan & RAB,Sekretaris,terkait
+sep-gform-pendaftaran,september,Gform Pendaftaran,"Eksternal (Komet, Himchamp & Dordar), Internal (PPMTK & Bazar)",2026-09-01,2026-09-30,,,"Header Gform, dst",Sekretaris,terkait
+sep-gform-presensi,september,Gform Presensi,"Milad, Komet, Himchamp, Dordar, MathTalk",2026-09-01,2026-09-30,,,"Header Gform, dst",Sekretaris,
+sep-presensi-panitia,september,Presensi Panitia,Semua Kegiatan Offline,2026-09-01,2026-09-30,,,Format Presensi,Sekretaris,
+sep-konsep-dekorasi,september,Konsep Dekorasi,,2026-09-01,2026-09-30,,,Draft konsep/sketsa dekorasi,Delog,
+sep-sistem-delog,september,Konsep Sistem Kerja Delog,,2026-09-01,2026-09-30,,,Sistem peminjaman alat dan barang inventaris,Delog,
+sep-list-sekolah,september,List Sekolah Komet,Penyebaran Online & Offline,2026-09-01,2026-09-30,,,Database/list tujuan undangan (sekolah & universitas),Humas,terkait
+sep-list-universitas,september,List Universitas (S1) Himchamp,Penyebaran Online & Offline,2026-09-01,2026-09-30,,,Database/list tujuan undangan (sekolah & universitas),Humas,terkait
+sep-undangan-online,september,Penyebaran Undangan Online,Komet & Himchamp,2026-09-01,2026-09-30,,,Surat Undangan & Guide Book,Humas,terkait
+sep-list-medpar,september,List Media Partner,,2026-09-01,2026-09-30,,,Database/list target media partner,Humas,
+sep-fiksasi-medpar,september,Fiksasi Media Partner,,,,Setiap H-2 minggu sebelum kegiatan,,,Humas,
+sep-fiksasi-juri,september,"Fiksasi Daftar Juri, Pemateri, Caster","Komet, PPMTK, Dordar & Himchamp",2026-09-01,2026-09-30,,,"List pemateri, juri & caster beserta harga",SC Kegiatan,terkait
+sep-rd-fix,september,RD Kegiatan Fix,Semua Kegiatan,2026-09-01,2026-09-30,,,,Acara,terkait
+sep-dekorasi-mulai,september,Dekorasi,Mulai Delog,2026-09-15,2026-09-30,,,"Alat & bahan dekorasi, form/buku peminjaman alat dan barang inventaris",Delog,
+sep-fiksasi-inventaris,september,Fiksasi Sistem Inventaris,,2026-09-15,2026-09-30,,,,Delog,
+okt-guidebook-rakor,oktober,Guidebook Kegiatan,Rakor dengan SC Kegiatan,2026-10-01,2026-10-07,,,Guidebook Kegiatan,"Kompetisi, SC Kegiatan, Ex-Officio",utama
+okt-guidebook-revisi,oktober,Guidebook Kegiatan,Revisi,2026-10-07,2026-10-14,,,Guidebook Kegiatan,"Kompetisi, SC Kegiatan, Ex-Officio",utama
+okt-rd-rakor,oktober,RD Kegiatan,Rakor dengan SC Kegiatan,2026-10-01,2026-10-07,,,Dokumen RD seluruh kegiatan,"Acara, SC Kegiatan, Ex-Officio",terkait
+okt-rd-revisi,oktober,RD Kegiatan,Revisi,2026-10-07,2026-10-14,,,Dokumen RD seluruh kegiatan,"Acara, SC Kegiatan, Ex-Officio",terkait
+okt-soal-komet,oktober,Soal Lomba Komet,Komet,2026-10-12,2026-10-27,,,Draft soal Komet yang sudah rampung,SC Komet,terkait
+okt-proposal-gubernur,oktober,Pengajuan Proposal Piala Gubernur,Himchamp & Komet,2026-10-12,2026-10-16,,,Proposal Kegiatan,"Humas, SC Kegiatan, SC Umum, Ketuplak",terkait
+okt-undangan-offline,oktober,Undangan Offline,Komet,2026-10-12,2026-10-23,,,Amplop dan surat undangan,Humas,terkait
+okt-sosialisasi-internal,oktober,Sosialisasi Internal,"PPMTK, Bazar, dan Penampilan Angkatan",2026-10-17,2026-10-17,,Lab/Kelas,,Ketuplak,
+okt-pendaftaran-internal,oktober,Pendaftaran Internal,PPMTK dan Bazar,2026-10-18,2026-10-23,,,"Gform, dst",Sekretaris,
+okt-tm-internal,oktober,Technical Meeting,Internal,2026-10-24,2026-10-24,,Lab/Kelas,,"Panitia Kegiatan, Kompetisi",utama
+okt-tm-komet,oktober,Technical Meeting,Komet,2026-10-31,2026-10-31,,Lab/Kelas,,"Panitia Kegiatan, Kompetisi",utama
+nov-tm-himchamp,november-desember,Technical Meeting,Himchamp,2026-11-01,2026-11-01,,Masjid lt.3,,Panitia Kegiatan,utama
+nov-opening,november-desember,Opening,"PPMTK, MathTalk",2026-11-04,2026-11-04,,Anwar,,"Panitia Kegiatan, Kompetisi",utama
+nov-penyisihan-komet,november-desember,Penyisihan,Komet (Online),2026-11-14,2026-11-14,,Lab/Kelas,,"Panitia Kegiatan, Kompetisi",utama
+nov-ppmtk-tes-tulis,november-desember,Penyisihan,Pembekalan dan Tes Tulis PPMTK (Offline),2026-11-14,2026-11-14,,R.305,,"Panitia Kegiatan, Kompetisi",utama
+nov-penyisihan-himchamp,november-desember,Penyisihan,Himchamp,2026-11-15,2026-11-15,,Masjid lt.3,,"Panitia Kegiatan, Kompetisi",utama
+nov-take-konten,november-desember,Take Konten,PPMTK,2026-11-18,2026-11-18,,Tugu Kujang,,"Panitia Kegiatan, Medkraf, Kompetisi",utama
+nov-komet,november-desember,Pelaksanaan Komet,Komet,2026-11-21,2026-11-21,,Abjan,,"Panitia Kegiatan, Kompetisi",utama
+nov-dordar,november-desember,Pelaksanaan Dordar,Dordar,2026-11-25,2026-11-25,,Aula FST,,,
+nov-himchamp,november-desember,Pelaksanaan Himchamp,Himchamp,2026-11-28,2026-11-28,,R.305,,"Panitia Kegiatan, Kompetisi",utama
+nov-ppmtk,november-desember,Pelaksanaan PPMTK,Unjuk Bakat & Tes Lisan,2026-11-28,2026-11-28,,Aula FST,,"Panitia Kegiatan, Kompetisi",utama
+des-closing,november-desember,Closing,"PPMTK, Bazar, dan Penampilan Angkatan",2026-12-02,2026-12-02,,Anwar,,"Panitia Kegiatan, Kompetisi",utama
