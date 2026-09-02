@@ -3,12 +3,18 @@
    ----------------------------------------------------------------------------
    Lapisan sumber data.
 
-   Alur: coba ambil dari Google Sheets (CSV) → kalau gagal, pakai data.js.
+   Urutan sumber, dari yang paling diutamakan:
+
+       1. Google Sheets (CSV)      data paling baru
+       2. cache di perangkat       hasil pengambilan terakhir yang berhasil
+       3. data.js                  cadangan yang ikut dikirim bersama situs
+
    Kegagalan ditangani PER BAGIAN, jadi kalau hanya tab "jadwal" yang rusak,
-   bagian lain tetap memakai data terbaru dari Sheets.
+   bagian lain tetap memakai data terbaru dari Sheets. Baris yang salah isi
+   dibuang satu per satu, bukan setabnya.
 
    Dashboard tidak pernah kosong: apa pun yang terjadi pada jaringan atau pada
-   isi spreadsheet, data.js selalu tersedia sebagai cadangan.
+   isi spreadsheet, selalu ada lapisan di bawahnya yang bisa ditampilkan.
 
    ----------------------------------------------------------------------------
    CARA MENYIAPKAN SPREADSHEET
@@ -71,6 +77,10 @@
   var FETCH_TIMEOUT_MS = 8000;
 
   var PLACEHOLDER = /YOUR_GOOGLE_SHEETS_CSV_LINK_HERE/i;
+
+  /* Kunci cache. Angka versinya dinaikkan kalau bentuk data berubah, supaya
+     cache lama dari versi sebelumnya tidak pernah dibaca sebagai data valid. */
+  var CACHE_KEY = 's7os.cache.v1';
 
   function isConfigured(url) {
     return typeof url === 'string' && url.trim() !== '' && !PLACEHOLDER.test(url);
@@ -186,6 +196,56 @@
   }
 
   /* --------------------------------------------------------------------------
+     3b. VALIDASI
+     ----------------------------------------------------------------------------
+     Spreadsheet diisi manusia dari ponsel, jadi salah ketik adalah hal normal.
+     Aturannya: satu baris rusak hanya membuang baris itu, tidak pernah membuang
+     seluruh tab dan tidak pernah membuat aplikasi berhenti. Alasannya dicatat
+     supaya bisa diperbaiki, bukan ditebak.
+     ------------------------------------------------------------------------ */
+
+  /** 0 = Minggu … 6 = Sabtu. Nilai di luar itu berarti salah isi. */
+  function validDay(v) {
+    return typeof v === 'number' && isFinite(v) && v >= 0 && v <= 6 && v === Math.floor(v);
+  }
+
+  function validTime(s) {
+    return typeof s === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
+  }
+
+  /** Tanggal harus benar-benar ada — '2026-02-31' ditolak, bukan digeser. */
+  function validISO(s) {
+    if (typeof s !== 'string') return false;
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if (!m) return false;
+    var d = new Date(+m[1], +m[2] - 1, +m[3]);
+    return d.getFullYear() === +m[1] && d.getMonth() === +m[2] - 1 && d.getDate() === +m[3];
+  }
+
+  function minutesOf(hhmm) {
+    var p = String(hhmm).split(':');
+    return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0);
+  }
+
+  /**
+   * Menyaring daftar hasil parsing dengan sebuah pemeriksa.
+   * @param {string} tab     nama tab, untuk pesan
+   * @param {Array}  list    hasil pemetaan baris
+   * @param {function} check mengembalikan null bila sah, atau alasan penolakan
+   * @param {Array}  issues  tempat menampung catatan
+   */
+  function keepValid(tab, list, check, issues) {
+    return list.filter(function (item, idx) {
+      var why = check(item);
+      if (!why) return true;
+      /* +2: baris 1 adalah judul kolom, dan indeks mulai dari 0. Angka ini
+         menunjuk ke nomor baris yang benar-benar terlihat di spreadsheet. */
+      issues.push('Tab "' + tab + '" baris ' + (idx + 2) + ' dilewati — ' + why + '.');
+      return false;
+    });
+  }
+
+  /* --------------------------------------------------------------------------
      4. PEMBENTUK STRUKTUR — CSV mentah menjadi bentuk yang dipakai aplikasi
      ------------------------------------------------------------------------ */
 
@@ -223,6 +283,11 @@
 
   function buildSettings(rows, local) {
     var map = settingsMap(rows);
+
+    /* Tab pengaturan yang kosong berarti belum diisi. Mengembalikan null di
+       sini membuat pemanggilnya memperlakukannya sama seperti tab kosong
+       lainnya: pakai nilai sebelumnya, jangan mengaku "data dari Sheets". */
+    if (!map.__raw.length) return null;
 
     var profile = {
       name: txt(map['profil.name']) || local.profile.name,
@@ -263,8 +328,8 @@
     };
   }
 
-  function buildSchedule(rows) {
-    return toObjects(rows).map(function (r) {
+  function buildSchedule(rows, issues) {
+    var list = toObjects(rows).map(function (r) {
       return {
         id: txt(r.id),
         name: txt(r.name),
@@ -278,11 +343,21 @@
         category: txt(r.category) || 'perkuliahan',
         formality: bool(r.formality)
       };
-    }).filter(function (c) { return c.id && c.name && c.day; });
+    });
+
+    return keepValid('jadwal', list, function (c) {
+      if (!c.id) return 'kolom id kosong';
+      if (!c.name) return 'kolom name kosong';
+      if (!validDay(c.day)) return 'kolom day harus angka 0–6 (0 = Minggu), bukan "' + c.day + '"';
+      if (!validTime(c.start)) return 'kolom start harus format jam HH:MM';
+      if (!validTime(c.end)) return 'kolom end harus format jam HH:MM';
+      if (minutesOf(c.end) <= minutesOf(c.start)) return 'jam selesai tidak boleh lebih awal dari jam mulai';
+      return null;
+    }, issues);
   }
 
-  function buildActivities(rows) {
-    return toObjects(rows).map(function (r) {
+  function buildActivities(rows, issues) {
+    var list = toObjects(rows).map(function (r) {
       var hasSession = txt(r.session_day) !== null && txt(r.session_start) !== null;
       return {
         id: txt(r.id),
@@ -308,11 +383,24 @@
           formality: bool(r.session_formality)
         } : null
       };
-    }).filter(function (a) { return a.id && a.name; });
+    });
+
+    return keepValid('aktivitas', list, function (a) {
+      if (!a.id) return 'kolom id kosong';
+      if (!a.name) return 'kolom name kosong';
+      if (a.deadline && !validISO(a.deadline)) return 'kolom deadline bukan tanggal yang sah';
+      if (a.session) {
+        if (!validDay(a.session.day)) return 'kolom session_day harus angka 0–6';
+        if (!validTime(a.session.start)) return 'kolom session_start harus format jam HH:MM';
+        /* session_end boleh kosong; yang dilarang hanya isian yang salah bentuk. */
+        if (a.session.end !== null && !validTime(a.session.end)) return 'kolom session_end harus format jam HH:MM';
+      }
+      return null;
+    }, issues);
   }
 
-  function buildGuidance(rows) {
-    return toObjects(rows).map(function (r) {
+  function buildGuidance(rows, issues) {
+    var list = toObjects(rows).map(function (r) {
       return {
         id: txt(r.id),
         type: txt(r.type),
@@ -325,11 +413,17 @@
         category: txt(r.category) || 'bimbingan',
         note: txt(r.note)
       };
-    }).filter(function (g) { return g.id && g.type; });
+    });
+
+    return keepValid('bimbingan', list, function (g) {
+      if (!g.id) return 'kolom id kosong';
+      if (!g.type) return 'kolom type kosong';
+      return null;
+    }, issues);
   }
 
-  function buildCalendar(rows) {
-    return toObjects(rows).map(function (r) {
+  function buildCalendar(rows, issues) {
+    var list = toObjects(rows).map(function (r) {
       return {
         id: txt(r.id),
         name: txt(r.name),
@@ -337,11 +431,20 @@
         end: isoDate(r.end),
         critical: bool(r.critical)
       };
-    }).filter(function (e) { return e.id && e.name && e.start; });
+    });
+
+    return keepValid('kalender', list, function (e) {
+      if (!e.id) return 'kolom id kosong';
+      if (!e.name) return 'kolom name kosong';
+      if (!validISO(e.start)) return 'kolom start bukan tanggal yang sah (pakai YYYY-MM-DD)';
+      if (e.end !== null && !validISO(e.end)) return 'kolom end bukan tanggal yang sah (pakai YYYY-MM-DD)';
+      if (e.end && e.end < e.start) return 'tanggal end lebih awal daripada start';
+      return null;
+    }, issues);
   }
 
-  function buildMathfest(rows) {
-    return toObjects(rows).map(function (r) {
+  function buildMathfest(rows, issues) {
+    var list = toObjects(rows).map(function (r) {
       var relevance = txt(r.relevance);
       return {
         id: txt(r.id),
@@ -356,7 +459,18 @@
         pj: txt(r.pj),
         relevance: relevance ? relevance.toLowerCase() : null
       };
-    }).filter(function (m) { return m.id && m.agenda; });
+    });
+
+    return keepValid('mathfest', list, function (m) {
+      if (!m.id) return 'kolom id kosong';
+      if (!m.agenda) return 'kolom agenda kosong';
+      /* Agenda boleh tidak bertanggal — kolom `when` yang dipakai. Yang ditolak
+         hanya tanggal yang diisi tetapi salah bentuk. */
+      if (m.start !== null && !validISO(m.start)) return 'kolom start bukan tanggal yang sah (pakai YYYY-MM-DD)';
+      if (m.end !== null && !validISO(m.end)) return 'kolom end bukan tanggal yang sah (pakai YYYY-MM-DD)';
+      if (m.start && m.end && m.end < m.start) return 'tanggal end lebih awal daripada start';
+      return null;
+    }, issues);
   }
 
   /* --------------------------------------------------------------------------
@@ -396,6 +510,51 @@
   }
 
   /* --------------------------------------------------------------------------
+     5b. CACHE — hasil pengambilan terakhir yang berhasil
+     ----------------------------------------------------------------------------
+     Urutan sumber data menjadi tiga lapis:
+
+         Google Sheets  →  cache di perangkat  →  data.js
+
+     Gunanya nyata: membuka dashboard di kampus tanpa sinyal tetap menampilkan
+     jadwal yang kemarin diubah dari ponsel, bukan mundur ke data.js yang bisa
+     jadi sudah usang berbulan-bulan.
+
+     Cache hanya berisi salinan data akademik milik sendiri, disimpan di
+     peramban pengguna, dan tidak pernah dikirim ke mana pun.
+     ------------------------------------------------------------------------ */
+  function readCache() {
+    try {
+      var raw = global.localStorage.getItem(CACHE_KEY);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || !parsed.sections) return null;
+      return parsed;
+    } catch (e) {
+      /* Penyimpanan diblokir, penuh, atau isinya rusak — perlakukan sebagai
+         "tidak ada cache". Ini bukan kondisi error bagi pengguna. */
+      return null;
+    }
+  }
+
+  function writeCache(sections) {
+    if (!sections || !Object.keys(sections).length) return null;
+    var payload = { savedAt: Date.now(), sections: sections };
+    try {
+      global.localStorage.setItem(CACHE_KEY, JSON.stringify(payload));
+    } catch (e) {
+      /* Mode privat atau kuota habis. Aplikasi tetap jalan tanpa cache. */
+      return null;
+    }
+    return payload.savedAt;
+  }
+
+  function clearCache() {
+    try { global.localStorage.removeItem(CACHE_KEY); return true; }
+    catch (e) { return false; }
+  }
+
+  /* --------------------------------------------------------------------------
      6. PENGAMBILAN
      ------------------------------------------------------------------------ */
   function fetchCSV(url) {
@@ -428,10 +587,36 @@
     });
   }
 
+  /* Menerapkan satu bagian hasil olahan ke objek data aplikasi. Dipakai baik
+     untuk hasil segar dari Sheets maupun untuk isi cache, sehingga keduanya
+     tidak mungkin berbeda perlakuan. */
+  function applySection(data, key, section) {
+    if (key === 'pengaturan') {
+      if (section.profile) data.profile = section.profile;
+      if (section.semester) data.semester = section.semester;
+      if (section.categories) data.categories = section.categories;
+      if (section.mathfestConfig) data.mathfestConfig = section.mathfestConfig;
+      if (section.mathfestPhases) data.mathfestPhases = section.mathfestPhases;
+      return;
+    }
+    if (key === 'jadwal') data.classes = section;
+    else if (key === 'aktivitas') data.activities = section;
+    else if (key === 'bimbingan') data.guidance = section;
+    else if (key === 'kalender') data.calendar = section;
+    else if (key === 'mathfest') data.mathfestTimeline = section;
+  }
+
   /**
    * Memuat seluruh data.
-   * @param {function} callback dipanggil dengan ({ data, source, notes }).
-   *   source: 'lokal' | 'sheets' | 'campuran'
+   *
+   * @param {function} callback dipanggil dengan:
+   *   {
+   *     data:    objek data aplikasi,
+   *     source:  'lokal' | 'sheets' | 'cache' | 'campuran',
+   *     savedAt: waktu data ini diambil dari Sheets (ms), atau null,
+   *     fresh:   true bila ada bagian yang baru saja diambil dari jaringan,
+   *     notes:   catatan teknis untuk konsol
+   *   }
    */
   function load(callback) {
     var local = localDataset();
@@ -451,8 +636,17 @@
       mathfestTeam: local.mathfestTeam
     };
 
+    function baseData() {
+      var out = {};
+      Object.keys(fallback).forEach(function (k) { out[k] = fallback[k]; });
+      return out;
+    }
+
     function finishLocal(reason) {
-      callback({ data: fallback, source: 'lokal', notes: reason ? [reason] : [] });
+      callback({
+        data: baseData(), source: 'lokal', savedAt: null, fresh: false,
+        notes: reason ? [reason] : []
+      });
     }
 
     if (typeof global.fetch !== 'function' || typeof global.Promise !== 'function') {
@@ -473,92 +667,128 @@
     });
 
     if (!configured.length) {
+      /* Tanpa tautan Sheets, data.js memang sumber resminya. Cache lama justru
+         akan menyesatkan, jadi tidak dipakai. */
       return finishLocal('Tautan Google Sheets belum diisi di sheets.js — memakai data lokal.');
     }
 
     var notes = [];
+    var cache = readCache();
+    var data = baseData();
+
+    /* Pasang isi cache lebih dulu. Apa pun yang berhasil diambil dari jaringan
+       akan menimpanya di bawah; yang gagal tetap memakai salinan ini. */
+    var usedCache = false;
+    if (cache) {
+      Object.keys(cache.sections).forEach(function (key) {
+        if (configured.indexOf(key) === -1) return;
+        try { applySection(data, key, cache.sections[key]); usedCache = true; }
+        catch (e) { /* satu bagian cache rusak — abaikan bagian itu saja */ }
+      });
+    }
+
+    function offlineNow() {
+      try { return global.navigator && global.navigator.onLine === false; }
+      catch (e) { return false; }
+    }
+
+    /* Saat perangkat jelas-jelas offline, tidak ada gunanya menunggu 8 detik
+       untuk enam permintaan yang pasti gagal. */
+    if (offlineNow()) {
+      return callback({
+        data: data,
+        source: usedCache ? 'cache' : 'lokal',
+        savedAt: usedCache && cache ? cache.savedAt : null,
+        fresh: false,
+        notes: ['Perangkat sedang offline — memakai ' +
+          (usedCache ? 'salinan terakhir yang tersimpan.' : 'data lokal.')]
+      });
+    }
 
     var jobs = configured.map(function (key) {
       return fetchCSV(SHEET_CSV_URLS[key])
         .then(function (rows) { return { key: key, rows: rows }; })
         .catch(function (err) {
-          notes.push('Tab "' + key + '" gagal dimuat (' + err.message + ') — bagian ini memakai data lokal.');
+          notes.push('Tab "' + key + '" gagal dimuat (' + err.message + ').');
           return { key: key, rows: null };
         });
     });
 
     Promise.all(jobs).then(function (results) {
-      var data = {
-        profile: fallback.profile,
-        semester: fallback.semester,
-        calendar: fallback.calendar,
-        classes: fallback.classes,
-        activities: fallback.activities,
-        guidance: fallback.guidance,
-        categories: fallback.categories,
-        mathfestConfig: fallback.mathfestConfig,
-        mathfestPhases: fallback.mathfestPhases,
-        mathfestTimeline: fallback.mathfestTimeline,
-        mathfestDivisionHeads: fallback.mathfestDivisionHeads,
-        mathfestTeam: fallback.mathfestTeam
-      };
-
+      var freshSections = {};
       var ok = 0;
 
       results.forEach(function (result) {
         if (!result.rows) return;
 
         try {
+          var built;
+
           if (result.key === 'pengaturan') {
-            var s = buildSettings(result.rows, {
+            built = buildSettings(result.rows, {
               profile: fallback.profile,
               semester: fallback.semester,
               categories: fallback.categories,
               mathfestConfig: fallback.mathfestConfig,
               mathfestPhases: fallback.mathfestPhases
             });
-            data.profile = s.profile;
-            data.semester = s.semester;
-            data.categories = s.categories;
-            data.mathfestConfig = s.mathfestConfig;
-            data.mathfestPhases = s.mathfestPhases;
-            ok++;
-            return;
-          }
-
-          var built = null;
-          if (result.key === 'jadwal') built = buildSchedule(result.rows);
-          else if (result.key === 'aktivitas') built = buildActivities(result.rows);
-          else if (result.key === 'bimbingan') built = buildGuidance(result.rows);
-          else if (result.key === 'kalender') built = buildCalendar(result.rows);
-          else if (result.key === 'mathfest') built = buildMathfest(result.rows);
+          } else if (result.key === 'jadwal') built = buildSchedule(result.rows, notes);
+          else if (result.key === 'aktivitas') built = buildActivities(result.rows, notes);
+          else if (result.key === 'bimbingan') built = buildGuidance(result.rows, notes);
+          else if (result.key === 'kalender') built = buildCalendar(result.rows, notes);
+          else if (result.key === 'mathfest') built = buildMathfest(result.rows, notes);
+          else return;
 
           /* Tab kosong dianggap belum diisi, bukan "hapus semua data". Ini
              mencegah dashboard mendadak kosong karena salah nama kolom. */
-          if (!built || !built.length) {
-            notes.push('Tab "' + result.key + '" kosong atau nama kolomnya tidak dikenali — bagian ini memakai data lokal.');
+          if (!built || (Array.isArray(built) && !built.length)) {
+            notes.push('Tab "' + result.key + '" kosong atau nama kolomnya tidak dikenali — bagian ini tidak diperbarui.');
             return;
           }
 
-          if (result.key === 'jadwal') data.classes = built;
-          else if (result.key === 'aktivitas') data.activities = built;
-          else if (result.key === 'bimbingan') data.guidance = built;
-          else if (result.key === 'kalender') data.calendar = built;
-          else if (result.key === 'mathfest') data.mathfestTimeline = built;
+          applySection(data, result.key, built);
+          freshSections[result.key] = built;
           ok++;
         } catch (err) {
-          notes.push('Tab "' + result.key + '" gagal diolah (' + err.message + ') — bagian ini memakai data lokal.');
+          notes.push('Tab "' + result.key + '" gagal diolah (' + err.message + ') — bagian ini tidak diperbarui.');
         }
       });
 
-      var source = ok === 0 ? 'lokal' : (ok === configured.length && !notes.length ? 'sheets' : 'campuran');
-      callback({ data: data, source: source, notes: notes });
+      /* Cache hanya ditulis kalau ada yang benar-benar baru. Bagian yang gagal
+         diambil tetap memakai salinan lamanya, jadi cache tidak pernah
+         kehilangan data yang sudah pernah berhasil tersimpan. */
+      var savedAt = null;
+      if (ok > 0) {
+        var merged = {};
+        if (cache && cache.sections) {
+          Object.keys(cache.sections).forEach(function (k) { merged[k] = cache.sections[k]; });
+        }
+        Object.keys(freshSections).forEach(function (k) { merged[k] = freshSections[k]; });
+        savedAt = writeCache(merged);
+      } else if (usedCache && cache) {
+        savedAt = cache.savedAt;
+      }
+
+      var source;
+      if (ok === 0) source = usedCache ? 'cache' : 'lokal';
+      else if (ok === configured.length) source = 'sheets';
+      else source = 'campuran';
+
+      callback({
+        data: data,
+        source: source,
+        savedAt: savedAt,
+        fresh: ok > 0,
+        notes: notes
+      });
     });
   }
 
   global.AcademicDataSource = {
     load: load,
     parseCSV: parseCSV,
+    clearCache: clearCache,
+    hasCache: function () { return !!readCache(); },
     isConfigured: function () {
       return Object.keys(SHEET_CSV_URLS).some(function (k) {
         return isConfigured(SHEET_CSV_URLS[k]);

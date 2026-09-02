@@ -23,21 +23,50 @@ setiap kali dibuka.
 ## Struktur
 
 ```
-index.html   kerangka halaman (header, navigasi, kontainer tampilan)
-style.css    design token + seluruh style
-data.js      data cadangan — dipakai kalau Google Sheets tidak terjangkau
-sheets.js    ambil + urai CSV dari Google Sheets, dan logika cadangannya
-script.js    logika: turunan data, render, mesin realtime, filter, pencarian, tema
+index.html          kerangka halaman (header, navigasi, kontainer tampilan)
+style.css           design token + seluruh style
+data.js             data cadangan — lapisan terakhir kalau semua sumber lain gagal
+sheets.js           ambil + urai CSV dari Google Sheets, validasi, dan cache
+script.js           logika: turunan data, render, mesin realtime, filter, pencarian, tema
+manifest.json       metadata PWA supaya bisa dipasang di layar utama
+service-worker.js   cache kerangka aplikasi agar tetap terbuka tanpa jaringan
+favicon.svg         ikon tab peramban
+icon-192.png        ikon PWA
+icon-512.png        ikon PWA (termasuk maskable)
+apple-touch-icon.png ikon layar utama iOS
 ```
 
 ## Dari mana datanya?
 
-Aplikasi mencoba Google Sheets lebih dulu, lalu jatuh ke `data.js` bila gagal.
-Kegagalan ditangani **per bagian**, jadi kalau hanya tab `jadwal` yang rusak,
-bagian lain tetap memakai data terbaru. Dashboard tidak pernah kosong.
+Ada tiga lapis sumber, dicoba berurutan:
 
-Sumber yang sedang dipakai selalu tertulis di footer, dan rincian kegagalannya
-dicetak ke konsol browser.
+| Urutan | Sumber | Kapan dipakai |
+| --- | --- | --- |
+| 1 | Google Sheets (CSV) | Selalu dicoba lebih dulu kalau tautannya sudah diisi |
+| 2 | Cache di perangkat | Kalau jaringan gagal — berisi hasil pengambilan terakhir yang berhasil |
+| 3 | `data.js` | Kalau tautan belum diisi, atau belum pernah ada pengambilan yang berhasil |
+
+Lapisan kedua ini yang membuat dashboard tetap berguna di kampus tanpa sinyal:
+yang tampil adalah jadwal yang kemarin kamu ubah dari ponsel, bukan `data.js`
+yang bisa jadi sudah usang berbulan-bulan.
+
+Kegagalan ditangani **per bagian**, jadi kalau hanya tab `jadwal` yang rusak,
+bagian lain tetap memakai data terbaru. Baris yang salah isi dibuang satu per
+satu, bukan setabnya — satu salah ketik tidak pernah mengosongkan jadwal.
+
+Status di footer menyebut keadaan sebenarnya, bukan yang paling enak dibaca:
+
+| Status | Artinya |
+| --- | --- |
+| `Tersinkron 14.32` | Semua tab baru saja diambil dari Sheets |
+| `Sebagian tersinkron 14.32` | Sebagian tab berhasil, sisanya memakai lapisan di bawahnya |
+| `Gagal menyambung · data tersimpan 2 jam lalu` | Jaringan gagal, yang tampil adalah salinan |
+| `Offline · data tersimpan kemarin` | Perangkat offline, yang tampil adalah salinan |
+| `Data akademik dikelola di data.js` | Tautan Sheets belum diisi |
+
+Klik status itu untuk menyinkronkan ulang tanpa memuat ulang halaman. Rincian
+teknis setiap kegagalan dan setiap baris yang dibuang dicetak ke konsol
+peramban, lengkap dengan nomor barisnya di spreadsheet.
 
 ### Menyiapkan Google Sheets
 
@@ -318,9 +347,22 @@ Tiap agenda:
 
 | Tombol | Fungsi |
 | --- | --- |
+| `Ctrl`/`Cmd` + `K` | Buka perintah cepat |
 | `/` | Fokus ke kolom pencarian |
-| `Esc` | Bersihkan pencarian dan kembali ke tampilan sebelumnya |
+| `Esc` | Tutup perintah cepat, atau bersihkan pencarian dan kembali ke tampilan sebelumnya |
+| `↑` `↓` | Pilih di perintah cepat |
+| `Enter` | Jalankan perintah yang terpilih |
 | `Tab` | Navigasi keyboard penuh dengan focus ring yang terlihat |
+
+Di layar sentuh, perintah cepat punya tombolnya sendiri di header — pintasan
+papan ketik tidak pernah menjadi satu-satunya jalan ke sebuah fitur.
+
+Setiap tampilan punya alamatnya sendiri, jadi memuat ulang tetap mendarat di
+tempat yang sama dan tombol back peramban bekerja seperti biasa:
+
+```
+#dashboard   #jadwal   #aktivitas   #bimbingan   #mathfest   #cari=analisis
+```
 
 ## Design system — "Kertas & Tinta"
 
@@ -357,9 +399,34 @@ Bayangan, warna aksen, dan warna status masing-masing disetel ulang di
   memang dapat digeser ke samping, dan itu disengaja.
 - **Layar pembuka** hanya muncul kalau `<html>` diberi kelas `is-booting` oleh
   skrip inline di `index.html`. Tanpa JavaScript kelas itu tidak pernah
-  terpasang, sehingga layar pembuka mustahil tersangkut. Ada tiga jaring
-  pengaman untuk menutupnya: klik atau tombol apa pun, event `load`, dan
-  batas paksa 2,6 detik.
+  terpasang. Ada empat jaring pengaman untuk menutupnya: klik atau tombol apa
+  pun, event `load`, batas paksa 2,6 detik dari JavaScript, dan — yang paling
+  penting — animasi CSS `intro-failsafe` yang membuka halaman setelah 3,2 detik
+  **tanpa melibatkan JavaScript sama sekali**. Jaring keempat ini menutup satu
+  jalur kegagalan nyata: kalau `script.js` gagal dimuat (salah nama berkas,
+  jaringan putus di tengah, kesalahan sintaks), dulu halaman tertutup selamanya
+  di balik layar pembuka.
+- **Slot formalitas.** Sesi dengan `formality: true` — saat ini hanya Studi
+  Literatur Sabtu — tertulis di KRS tetapi tidak benar-benar berjalan. Slot
+  seperti ini tetap tampil di tab Jadwal, ditandai garis putus-putus, lencana
+  "Formalitas KRS", dan catatan teksnya. Tetapi slot ini **tidak pernah** masuk
+  mesin realtime: bukan "kelas berikutnya", tidak dihitung mundur, tidak muncul
+  di Jadwal Hari Ini, dan tidak pernah dianggap bentrok. Tanpa pemisahan ini,
+  setiap Jumat malam dashboard akan menghitung mundur ke kelas yang tidak ada.
+- **Validasi data dari Sheets.** Spreadsheet diisi dari ponsel, jadi salah ketik
+  itu normal. `day` harus 0–6, jam harus `HH:MM` dan tidak terbalik, tanggal
+  harus benar-benar ada (`2026-02-31` ditolak, bukan digeser). Baris yang gagal
+  dibuang sendirian dengan alasan dan nomor barisnya di konsol.
+- **Batas kesalahan per bagian.** Setiap bagian besar dibungkus `guard()`. Kalau
+  satu bagian gagal dirender, bagian itu diganti pesan singkat dan sisa halaman
+  tetap bisa dipakai — bukan seluruh tampilan yang kosong.
+- **PWA.** `service-worker.js` menyimpan kerangka aplikasi (HTML, CSS, JS, ikon,
+  font) sehingga dashboard tetap terbuka tanpa jaringan. Service worker sengaja
+  **tidak** menyimpan CSV Google Sheets: kalau ikut disimpan, kamu bisa melihat
+  jadwal lama sambil footer menulis "Tersinkron". Umur data adalah urusan cache
+  di `sheets.js`, yang tahu cara menjelaskannya kepada pengguna.
+- Service worker hanya didaftarkan di `https` atau `localhost`. Membuka lewat
+  `file://` melewatinya begitu saja.
 - **Reveal saat scroll** memakai `IntersectionObserver`. Kelas `.reveal` hanya
   dipasang dari JavaScript — tanpa JS atau tanpa `IntersectionObserver`, tidak
   ada elemen yang pernah disembunyikan.
@@ -371,3 +438,9 @@ Bayangan, warna aksen, dan warna status masing-masing disetel ulang di
 - `--text-subtle` tidak boleh dipakai langsung di atas hero band: di sana
   kontrasnya hanya ~3,7–4,5:1. Pakai `--text-muted`, atau beri elemen itu latar
   opaque sendiri.
+- Elemen yang disembunyikan dengan atribut `hidden` **tidak boleh** punya
+  `display` dari selektor kelas — `display: flex` pada `.palette-backdrop`
+  mengalahkan `[hidden] { display: none }` bawaan peramban, dan dialognya jadi
+  selalu terlihat. Karena itu ada `.palette-backdrop[hidden] { display: none; }`
+  dan `.search-clear[hidden] { display: none; }`. Berlaku untuk setiap elemen
+  baru yang memakai pola yang sama.

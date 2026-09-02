@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Semester 7 Academic OS">
+  <rect width="64" height="64" rx="14" fill="#0f766e"/>
+  <g fill="#f7f6f3">
+    <rect x="16.5" y="19" width="31" height="5.5" rx="2.75"/>
+    <rect x="16.5" y="29.3" width="23" height="5.5" rx="2.75"/>
+    <rect x="16.5" y="39.6" width="15.5" height="5.5" rx="2.75"/>
+  </g>
+  <circle cx="11" cy="21.75" r="2.9" fill="#ea580c"/>
+</svg>

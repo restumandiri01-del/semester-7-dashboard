@@ -37,6 +37,7 @@
   var INDEX = [];
   var DATA_SOURCE = 'lokal';
   var DATA_NOTES = [];
+  var DATA_SAVED_AT = null;   /* kapan data yang tampil diambil dari Sheets */
 
   /* --------------------------------------------------------------------------
      hydrate() — satu-satunya pintu masuk data ke aplikasi.
@@ -283,8 +284,34 @@
     return { scheduled: scheduled, extra: extra, total: scheduled + extra, breakdown: breakdown };
   }
 
-  function classesOn(day) {
-    return SESSIONS.filter(function (c) { return c.day === day; });
+  /* --------------------------------------------------------------------------
+     SESI FORMALITAS
+     ----------------------------------------------------------------------------
+     Sebagian slot tertulis di KRS tetapi tidak benar-benar berjalan. Contohnya
+     Studi Literatur Sabtu 10.20–12.00: slot itu ada di SALAM, tetapi tidak ada
+     kelas maupun bimbingan yang benar-benar diadakan hari Sabtu — waktunya
+     menyesuaikan dosen.
+
+     Slot seperti ini TETAP ditampilkan pada jadwal mingguan, karena memang itu
+     yang tertulis di KRS dan pengguna perlu melihatnya. Tetapi slot ini tidak
+     pernah dipakai oleh mesin realtime: bukan "kelas berikutnya", tidak dihitung
+     mundur, tidak muncul di jadwal hari ini, dan tidak pernah dianggap bentrok.
+
+     Tanpa pemisahan ini, setiap Jumat malam dashboard akan menghitung mundur ke
+     kelas yang tidak pernah ada.
+     ------------------------------------------------------------------------ */
+  function realSessions() {
+    return SESSIONS.filter(function (c) { return !c.formality; });
+  }
+
+  /**
+   * @param {number} day 0 = Minggu … 6 = Sabtu
+   * @param {boolean} includeFormality sertakan slot formalitas KRS
+   */
+  function classesOn(day, includeFormality) {
+    return SESSIONS.filter(function (c) {
+      return c.day === day && (includeFormality || !c.formality);
+    });
   }
 
   /** Status kegiatan dalam kerangka pekan berjalan (Senin–Sabtu). */
@@ -311,8 +338,9 @@
   function liveClass(now) {
     var day = now.getDay();
     var mins = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
-    for (var i = 0; i < SESSIONS.length; i++) {
-      var c = SESSIONS[i];
+    var list = realSessions();
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i];
       if (c.day === day && mins >= toMinutes(c.start) && mins < toMinutes(c.end)) return c;
     }
     return null;
@@ -341,7 +369,7 @@
 
   function nextClass(now) {
     var best = null;
-    SESSIONS.forEach(function (c) {
+    realSessions().forEach(function (c) {
       var at = nextOccurrence(c, now);
       if (!best || at.getTime() < best.at.getTime()) best = { cls: c, at: at };
     });
@@ -466,13 +494,63 @@
     return items;
   }
 
+  /* --------------------------------------------------------------------------
+     Pencarian berperingkat.
+     ----------------------------------------------------------------------------
+     Sebelumnya hasil keluar dalam urutan indeks, sehingga mengetik "analisis
+     real" bisa menampilkan agenda kepanitiaan lebih dulu daripada mata kuliahnya
+     sendiri. Peringkatnya sengaja sederhana dan deterministik:
+
+         judul persis  >  judul diawali  >  judul mengandung  >  metadata
+
+     Dataset ini puluhan entri, jadi tidak ada alasan memuat pustaka fuzzy search.
+     ------------------------------------------------------------------------ */
+  var KIND_ORDER = { class: 0, activity: 1, guidance: 2, mathfest: 3, panitia: 4 };
+
+  function scoreItem(item, q, tokens) {
+    var title = item.title.toLowerCase();
+    var score = 0;
+
+    if (title === q) score += 1000;
+    else if (title.indexOf(q) === 0) score += 600;
+    else if (title.indexOf(q) !== -1) score += 400;
+    else if (item.haystack.indexOf(q) !== -1) score += 200;
+
+    /* Setiap kata yang kena di judul bernilai lebih daripada yang hanya kena di
+       metadata — inilah yang membedakan "Analisis Real" dari agenda yang
+       kebetulan menyebut kata "real". */
+    tokens.forEach(function (t) {
+      if (title.indexOf(t) === 0) score += 60;
+      else if (title.indexOf(t) !== -1) score += 40;
+      else score += 8;
+    });
+
+    /* Entri yang lebih pendek judulnya biasanya lebih spesifik. */
+    score -= Math.min(20, title.length / 8);
+    return score;
+  }
+
   function runSearch(query) {
     var q = String(query || '').trim().toLowerCase();
     if (!q) return [];
     var tokens = q.split(/\s+/);
-    return INDEX.filter(function (item) {
-      return tokens.every(function (t) { return item.haystack.indexOf(t) !== -1; });
+
+    var hits = [];
+    INDEX.forEach(function (item, position) {
+      var match = tokens.every(function (t) { return item.haystack.indexOf(t) !== -1; });
+      if (!match) return;
+      hits.push({ item: item, score: scoreItem(item, q, tokens), position: position });
     });
+
+    /* Urutan sekunder dibuat eksplisit supaya hasil tidak pernah berubah-ubah
+       untuk kueri yang sama. */
+    hits.sort(function (a, b) {
+      return b.score - a.score ||
+        (KIND_ORDER[a.item.kind] || 9) - (KIND_ORDER[b.item.kind] || 9) ||
+        a.position - b.position;
+    });
+
+    return hits.map(function (h) { return h.item; });
   }
 
   function highlight(text, query) {
@@ -490,6 +568,26 @@
   /* ==========================================================================
      6. KOMPONEN
      ======================================================================== */
+
+  /* --------------------------------------------------------------------------
+     guard() — batas kesalahan per bagian.
+     ----------------------------------------------------------------------------
+     Satu bagian yang gagal dirender (misalnya karena satu baris spreadsheet
+     berbentuk aneh) tidak boleh mengosongkan seluruh halaman. Bagian itu diganti
+     pesan singkat, sisanya tetap tampil dan tetap bisa dipakai.
+     ------------------------------------------------------------------------ */
+  function guard(label, fn) {
+    try {
+      return fn();
+    } catch (err) {
+      console.error('Bagian "' + label + '" gagal dirender:', err);
+      return '<section class="card card-pad section-error" role="alert">' +
+        '<p class="semester-note">' + icon('alert') +
+        '<span><strong>' + esc(label) + '</strong> tidak dapat ditampilkan. ' +
+        'Bagian lain di halaman ini tetap bisa dipakai. Detail teknisnya ada di konsol peramban.</span>' +
+        '</p></section>';
+    }
+  }
 
   function emptyState(title, text, compact) {
     return '<div class="empty-state' + (compact ? ' is-compact' : '') + '">' +
@@ -513,7 +611,16 @@
 
   function classCard(cls, now) {
     var state = statusOf(cls, now);
-    return '<article class="class-card" data-state="' + state + '" data-type="' + cls.type + '">' +
+
+    /* Slot formalitas tidak punya status berjalan/selesai — menampilkannya
+       sebagai "Sedang Berlangsung" akan berbohong. Yang ditampilkan adalah
+       sifat slotnya. */
+    var foot = cls.formality
+      ? '<span class="badge badge-muted badge-plain">Formalitas KRS</span>'
+      : statusBadge(state);
+
+    return '<article class="class-card" data-state="' + (cls.formality ? 'formality' : state) +
+      '" data-type="' + cls.type + '">' +
       (cls.type === 'aktivitas'
         ? '<p class="cc-kicker">' + esc(cls.kind) + (cls.classGroup ? ' · Kelas ' + esc(cls.classGroup) : '') + '</p>'
         : '') +
@@ -525,7 +632,10 @@
       '<span>' + icon('user') + esc(cls.lecturer) + '</span>' +
       '<span>' + icon('layers') + cls.sks + ' SKS</span>' +
       '</div>' +
-      '<div class="cc-foot">' + statusBadge(state) + '</div>' +
+      (cls.formality
+        ? '<p class="cc-note">Tertulis di KRS, pelaksanaannya menyesuaikan dosen.</p>'
+        : '') +
+      '<div class="cc-foot">' + foot + '</div>' +
       '</article>';
   }
 
@@ -586,7 +696,7 @@
     // Kelas menyusul di hari yang sama
     var following = null;
     if (live) {
-      following = classesOn(now.getDay()).filter(function (c) {
+      following = classesOn(now.getDay(), false).filter(function (c) {
         return toMinutes(c.start) >= toMinutes(cls.end);
       })[0] || null;
     }
@@ -609,7 +719,8 @@
 
   function renderDashboard(now) {
     var today = now.getDay();
-    var todays = classesOn(today);
+    var todays = classesOn(today, false);
+    var formalToday = classesOn(today, true).filter(function (c) { return c.formality; });
 
     var html = '';
 
@@ -625,7 +736,7 @@
 
     /* ---- Kolom utama ---- */
     html += '<div class="dash-col">';
-    html += focusCard(now);
+    html += guard('Kelas Berikutnya', function () { return focusCard(now); });
 
     html += '<section id="today-section" aria-labelledby="today-heading">' +
       '<div class="section-head"><h2 id="today-heading">Jadwal Hari Ini</h2>' +
@@ -636,6 +747,14 @@
       html += '<div class="card"><ul class="schedule-list">' +
         todays.map(function (c) { return scheduleRow(c, now); }).join('') +
         '</ul></div>';
+    } else if (formalToday.length) {
+      /* Hari ini hanya berisi slot yang tertulis di KRS tetapi tidak benar-benar
+         berjalan. Menyebutnya "kosong" saja akan membingungkan ketika pengguna
+         membuka tab Jadwal dan slot itu ada di sana. */
+      html += emptyState('Tidak ada kegiatan yang benar-benar berjalan',
+        formalToday.map(function (c) { return c.name; }).join(', ') +
+        ' tercatat pada ' + DAY_NAMES[today] + ' di KRS, tetapi pelaksanaannya menyesuaikan dosen. ' +
+        'Slot ini tetap tampil di tab Jadwal.');
     } else if (today === 0) {
       html += emptyState('Hari Minggu',
         'Tidak ada kegiatan akademik terjadwal. Kegiatan berikutnya sudah ditampilkan di atas.');
@@ -685,10 +804,10 @@
     /* Progress semester */
     html += '<section class="card card-pad" aria-labelledby="progress-heading">' +
       '<div class="section-head"><h2 id="progress-heading">Progress Semester</h2></div>' +
-      semesterProgressBlock(now) +
+      guard('Progress Semester', function () { return semesterProgressBlock(now); }) +
       '</section>';
 
-    html += mathfestDashCard(now);
+    html += guard('Ringkasan Kepanitiaan', function () { return mathfestDashCard(now); });
 
     html += '</div></div>';
     return html;
@@ -909,7 +1028,9 @@
   }
 
   function dayColumn(day, now, matches) {
-    var list = classesOn(day).filter(matches || function () { return true; });
+    /* Jadwal mingguan sengaja MENAMPILKAN slot formalitas: itu yang tertulis
+       di KRS, dan menghilangkannya justru membuat jadwal terasa salah. */
+    var list = classesOn(day, true).filter(matches || function () { return true; });
     var isToday = day === now.getDay();
     var sks = list.reduce(function (s, c) { return s + c.sks; }, 0);
 
@@ -1348,8 +1469,8 @@
       '</span></p></header>';
 
     html += '<div class="dash-grid"><div class="dash-col">';
-    html += mfFocusCard(now);
-    html += mfAlertSection(now);
+    html += guard('Agenda Berikutnya', function () { return mfFocusCard(now); });
+    html += guard('Peringatan Jadwal', function () { return mfAlertSection(now); });
     html += '</div><div class="dash-col">';
 
     html += '<section class="card card-pad" aria-labelledby="mf-load-heading">' +
@@ -1373,8 +1494,8 @@
         : '') +
       '</section>';
 
-    html += mfTeamCard();
-    html += mfHeadsCard();
+    html += guard('Tim Divisi', mfTeamCard);
+    html += guard('Penanggung Jawab Divisi', mfHeadsCard);
     html += '</div></div>';
 
     /* Filter */
@@ -1623,8 +1744,94 @@
     }
   }
 
+  /* --------------------------------------------------------------------------
+     ROUTING
+     ----------------------------------------------------------------------------
+     Tampilan aktif ditulis ke alamat halaman. Tiga hal ini jadi bekerja seperti
+     yang diharapkan orang dari sebuah situs: memuat ulang tetap di tampilan yang
+     sama, tombol back kembali ke tampilan sebelumnya, dan tautan bisa dibagikan
+     langsung ke tab tertentu (mis. .../#mathfest).
+
+     Dipakai fragmen (#), bukan History API dengan path sungguhan, supaya tetap
+     berjalan sebagai situs statis tanpa aturan rewrite di sisi server.
+     ------------------------------------------------------------------------ */
+  function hashFor(name) {
+    if (name === 'search') return '#cari=' + encodeURIComponent(searchQuery);
+    return '#' + name;
+  }
+
+  function parseHash() {
+    var raw = '';
+    try { raw = String(window.location.hash || '').replace(/^#/, ''); } catch (e) { return null; }
+    if (!raw) return null;
+    if (raw.indexOf('cari=') === 0) {
+      var q = '';
+      try { q = decodeURIComponent(raw.slice(5)); } catch (e) { q = raw.slice(5); }
+      return { view: 'search', q: q };
+    }
+    return dom.views[raw] && raw !== 'search' ? { view: raw, q: null } : null;
+  }
+
+  /* replace = true untuk perubahan yang tidak layak jadi langkah riwayat
+     tersendiri, terutama saat mengetik di kotak pencarian. Tanpa ini, satu kata
+     kunci meninggalkan selusin entri riwayat dan tombol back jadi tidak berguna. */
+  function syncHash(name, replace) {
+    var target = hashFor(name);
+    try {
+      if (window.location.hash === target) return;
+      if (replace && window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', target);
+      } else {
+        window.location.hash = target;
+      }
+    } catch (e) { /* riwayat tidak tersedia — navigasi tetap jalan tanpa alamat */ }
+  }
+
+  function onHashChange() {
+    var route = parseHash();
+
+    if (!route) {
+      if (currentView !== 'dashboard') setView('dashboard', { fromHistory: true });
+      return;
+    }
+
+    if (route.view === 'search') {
+      if (dom.searchInput.value !== route.q) {
+        dom.searchInput.value = route.q;
+        searchQuery = route.q;
+        syncSearchAffordances();
+      }
+      if (currentView !== 'search') {
+        viewBeforeSearch = currentView;
+        setView('search', { fromHistory: true });
+      } else {
+        renderCurrent();
+      }
+      return;
+    }
+
+    if (currentView !== route.view) {
+      if (searchQuery) resetSearchField();
+      viewBeforeSearch = route.view;
+      setView(route.view, { fromHistory: true });
+    }
+  }
+
+  var VIEW_TITLE = {
+    dashboard: 'Dashboard', jadwal: 'Jadwal', aktivitas: 'Aktivitas',
+    bimbingan: 'Bimbingan', mathfest: 'Mathfest', search: 'Pencarian'
+  };
+
+  function updateTitle() {
+    var label = currentView === 'search' && searchQuery.trim()
+      ? 'Cari “' + searchQuery.trim() + '”'
+      : (VIEW_TITLE[currentView] || 'Dashboard');
+    document.title = label + ' · Semester ' + PROFILE.semester + ' · ' + PROFILE.name;
+  }
+
   function setView(name, opts) {
     if (!dom.views[name]) return;
+    var changed = currentView !== name;
     currentView = name;
 
     Object.keys(dom.views).forEach(function (key) {
@@ -1648,6 +1855,18 @@
 
     animateEntrance();
 
+    if (!(opts && opts.fromHistory)) {
+      syncHash(name, name === 'search');
+    }
+    updateTitle();
+
+    /* Pada aplikasi satu halaman, perpindahan tampilan tidak menghasilkan
+       pemuatan halaman baru — jadi pembaca layar tidak diberi tahu apa pun
+       kecuali kita yang mengumumkannya. */
+    if (changed && dom.liveRegion && name !== 'search') {
+      dom.liveRegion.textContent = 'Tampilan ' + (VIEW_TITLE[name] || name) + ' terbuka.';
+    }
+
     if (opts && opts.focus) {
       dom.main.focus({ preventScroll: true });
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1666,7 +1885,7 @@
       greetingBucket(now.getHours()),
       live ? live.id : '-',
       next ? next.cls.id : '-',
-      SESSIONS.map(function (c) { return statusOf(c, now); }).join(',')
+      realSessions().map(function (c) { return statusOf(c, now); }).join(',')
     ].join('|');
   }
 
@@ -1736,10 +1955,19 @@
     return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
   }
 
+  /* Warna bilah peramban ikut berpindah. Sebelumnya theme-color dipatok pada
+     preferensi sistem, jadi memilih tema gelap secara manual di perangkat yang
+     bertema terang menyisakan bilah putih di atas halaman gelap. */
+  var THEME_COLOR = { light: '#f7f6f3', dark: '#0e1413' };
+
   function applyTheme(theme, persist) {
     document.documentElement.setAttribute('data-theme', theme);
     dom.themeToggle.setAttribute('aria-label',
       theme === 'dark' ? 'Aktifkan tema terang' : 'Aktifkan tema gelap');
+
+    var meta = document.getElementById('theme-color');
+    if (meta) meta.setAttribute('content', THEME_COLOR[theme] || THEME_COLOR.light);
+
     if (persist) {
       try { localStorage.setItem('s7os.theme', theme); } catch (e) {}
     }
@@ -1773,6 +2001,21 @@
     if (dom.searchKbd) dom.searchKbd.style.opacity = hasText ? '0' : '';
   }
 
+  /* Pengumuman jumlah hasil ditunda sebentar. Tanpa jeda ini, mengetik lima
+     huruf berarti lima pengumuman beruntun ke pembaca layar. */
+  var announceTimer = null;
+
+  function announceResults() {
+    if (announceTimer) window.clearTimeout(announceTimer);
+    announceTimer = window.setTimeout(function () {
+      if (!dom.liveRegion || currentView !== 'search') return;
+      var n = runSearch(searchQuery).length;
+      dom.liveRegion.textContent = n === 0
+        ? 'Tidak ada hasil untuk ' + searchQuery.trim() + '.'
+        : n + ' hasil untuk ' + searchQuery.trim() + '.';
+    }, 700);
+  }
+
   function handleSearchInput() {
     searchQuery = dom.searchInput.value;
     syncSearchAffordances();
@@ -1780,6 +2023,7 @@
     if (searchQuery.trim().length > 0) {
       if (currentView !== 'search') viewBeforeSearch = currentView;
       setView('search');
+      announceResults();
     } else if (currentView === 'search') {
       setView(viewBeforeSearch);
     }
@@ -1800,6 +2044,248 @@
   }
 
   /* ==========================================================================
+     16b. COMMAND PALETTE
+     ----------------------------------------------------------------------------
+     Satu tempat untuk berpindah tampilan, mengganti tema, dan melompat ke mata
+     kuliah atau agenda tertentu tanpa menyentuh tetikus. Dibuka dengan Ctrl/⌘+K,
+     dan lewat tombol di header untuk perangkat sentuh yang tidak punya papan
+     ketik.
+
+     Dibangun dari nol dengan elemen native: satu dialog, satu input, satu
+     listbox. Tidak ada pustaka yang dimuat hanya untuk ini.
+     ======================================================================== */
+
+  var palette = {
+    root: null, input: null, list: null, foot: null,
+    items: [], active: 0, open: false, restoreTo: null
+  };
+
+  function paletteCommands() {
+    var cmds = VIEWS.map(function (v) {
+      return {
+        icon: v.icon,
+        title: 'Buka ' + v.label,
+        hint: 'Tampilan',
+        run: function () {
+          resetSearchField();
+          viewBeforeSearch = v.id;
+          setView(v.id, { focus: true });
+        }
+      };
+    });
+
+    cmds.push({
+      icon: 'clock',
+      title: 'Lompat ke Jadwal Hari Ini',
+      hint: 'Dashboard',
+      run: function () {
+        resetSearchField();
+        setView('dashboard');
+        var section = document.getElementById('today-section');
+        if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+
+    cmds.push({
+      icon: 'sparkles',
+      title: currentTheme() === 'dark' ? 'Aktifkan tema terang' : 'Aktifkan tema gelap',
+      hint: 'Tampilan',
+      run: function () { applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', true); }
+    });
+
+    /* Hanya ditawarkan kalau memang ada sumber daring yang bisa disegarkan. */
+    var configured = false;
+    try {
+      configured = !!(window.AcademicDataSource && window.AcademicDataSource.isConfigured());
+    } catch (e) { configured = false; }
+    if (configured) {
+      cmds.push({ icon: 'inbox', title: 'Perbarui data dari Google Sheets', hint: 'Data', run: refreshData });
+    }
+
+    return cmds;
+  }
+
+  function paletteMatches(query) {
+    var q = String(query || '').trim().toLowerCase();
+    var out = [];
+
+    paletteCommands().forEach(function (cmd) {
+      var hay = (cmd.title + ' ' + cmd.hint).toLowerCase();
+      if (!q || q.split(/\s+/).every(function (t) { return hay.indexOf(t) !== -1; })) out.push(cmd);
+    });
+
+    /* Hasil data hanya muncul kalau ada yang diketik — daftar perintah harus
+       tetap terbaca saat palette baru dibuka. */
+    if (q) {
+      runSearch(q).slice(0, 6).forEach(function (item) {
+        out.push({
+          icon: item.icon,
+          title: item.title,
+          hint: item.categoryLabel,
+          run: function () {
+            dom.searchInput.value = item.title;
+            searchQuery = item.title;
+            syncSearchAffordances();
+            if (currentView !== 'search') viewBeforeSearch = currentView;
+            setView('search');
+            announceResults();
+          }
+        });
+      });
+    }
+
+    return out;
+  }
+
+  function paletteRender() {
+    palette.items = paletteMatches(palette.input.value);
+    if (palette.active >= palette.items.length) palette.active = 0;
+
+    if (!palette.items.length) {
+      palette.list.innerHTML = '<li class="palette-empty">Tidak ada perintah atau data yang cocok.</li>';
+      palette.input.removeAttribute('aria-activedescendant');
+      return;
+    }
+
+    palette.list.innerHTML = palette.items.map(function (item, i) {
+      return '<li class="palette-item" role="option" id="palette-opt-' + i + '"' +
+        ' aria-selected="' + (i === palette.active) + '" data-index="' + i + '">' +
+        icon(item.icon) +
+        '<span class="palette-item-title">' + esc(item.title) + '</span>' +
+        '<span class="palette-item-hint">' + esc(item.hint) + '</span>' +
+        '</li>';
+    }).join('');
+
+    palette.input.setAttribute('aria-activedescendant', 'palette-opt-' + palette.active);
+
+    var el = palette.list.children[palette.active];
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+  }
+
+  function paletteMove(step) {
+    if (!palette.items.length) return;
+    palette.active = (palette.active + step + palette.items.length) % palette.items.length;
+    paletteRender();
+  }
+
+  function paletteRun(index) {
+    var item = palette.items[index];
+    if (!item) return;
+    paletteClose(false);          // tutup dulu supaya fokus tidak diperebutkan
+    try { item.run(); }
+    catch (err) { console.error('Perintah gagal dijalankan:', err); }
+  }
+
+  function paletteOpen() {
+    if (palette.open || !palette.root) return;
+    palette.open = true;
+    palette.restoreTo = document.activeElement;
+
+    palette.root.hidden = false;
+    document.documentElement.classList.add('has-palette');
+
+    palette.input.value = '';
+    palette.active = 0;
+    paletteRender();
+    palette.input.focus();
+  }
+
+  /** @param {boolean} restore kembalikan fokus ke elemen pemicu */
+  function paletteClose(restore) {
+    if (!palette.open) return;
+    palette.open = false;
+
+    /* Lepaskan fokus sebelum menyembunyikan. Tanpa ini fokus tertinggal pada
+       elemen yang sudah tidak terlihat, dan pengguna papan ketik kehilangan
+       jejak posisinya. */
+    if (palette.input && palette.input.blur) palette.input.blur();
+
+    palette.root.hidden = true;
+    document.documentElement.classList.remove('has-palette');
+
+    if (restore !== false) {
+      /* Kembali ke pemicunya. Kalau palette dibuka dengan pintasan papan ketik
+         saat tidak ada elemen yang terfokus, tombol perintah cepat di header
+         adalah tempat mendarat yang paling masuk akal — terlihat, dan tepat di
+         tempat pengguna berharap menemukannya lagi. */
+      var target = palette.restoreTo;
+      var usable = target && target.focus && target !== document.body &&
+        document.contains(target);
+      var fallback = dom.paletteButton || dom.themeToggle;
+      try { (usable ? target : fallback).focus(); }
+      catch (e) { /* elemen sudah hilang — biarkan peramban yang menentukan */ }
+    }
+
+    palette.restoreTo = null;
+  }
+
+  function buildPalette() {
+    var root = document.createElement('div');
+    root.className = 'palette-backdrop';
+    root.id = 'palette';
+    root.hidden = true;
+    root.innerHTML =
+      '<div class="palette" role="dialog" aria-modal="true" aria-labelledby="palette-title">' +
+      '<h2 class="sr-only" id="palette-title">Perintah cepat</h2>' +
+      '<div class="palette-field">' +
+      icon('search') +
+      '<input id="palette-input" type="text" role="combobox" aria-expanded="true" ' +
+      'aria-controls="palette-list" aria-autocomplete="list" autocomplete="off" ' +
+      'spellcheck="false" placeholder="Perintah, mata kuliah, atau agenda…">' +
+      '<kbd class="palette-kbd">Esc</kbd>' +
+      '</div>' +
+      '<ul class="palette-list" id="palette-list" role="listbox" aria-label="Perintah dan hasil"></ul>' +
+      '<p class="palette-foot">' +
+      '<span><kbd>↑</kbd><kbd>↓</kbd> pilih</span>' +
+      '<span><kbd>Enter</kbd> jalankan</span>' +
+      '<span><kbd>Esc</kbd> tutup</span>' +
+      '</p>' +
+      '</div>';
+
+    document.body.appendChild(root);
+
+    palette.root = root;
+    palette.input = root.querySelector('#palette-input');
+    palette.list = root.querySelector('#palette-list');
+
+    palette.input.addEventListener('input', function () {
+      palette.active = 0;
+      paletteRender();
+    });
+
+    palette.input.addEventListener('keydown', function (ev) {
+      if (ev.key === 'ArrowDown') { ev.preventDefault(); paletteMove(1); }
+      else if (ev.key === 'ArrowUp') { ev.preventDefault(); paletteMove(-1); }
+      else if (ev.key === 'Home') { ev.preventDefault(); palette.active = 0; paletteRender(); }
+      else if (ev.key === 'End') { ev.preventDefault(); palette.active = palette.items.length - 1; paletteRender(); }
+      else if (ev.key === 'Enter') { ev.preventDefault(); paletteRun(palette.active); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); paletteClose(true); }
+      else if (ev.key === 'Tab') {
+        /* Hanya ada satu elemen yang bisa difokus di dalam dialog, jadi menahan
+           Tab di sini sudah cukup untuk mengunci fokus. */
+        ev.preventDefault();
+      }
+    });
+
+    palette.list.addEventListener('click', function (ev) {
+      var li = ev.target.closest('.palette-item');
+      if (li) paletteRun(parseInt(li.dataset.index, 10));
+    });
+
+    palette.list.addEventListener('mousemove', function (ev) {
+      var li = ev.target.closest('.palette-item');
+      if (!li) return;
+      var i = parseInt(li.dataset.index, 10);
+      if (i !== palette.active) { palette.active = i; paletteRender(); }
+    });
+
+    /* Klik di luar panel menutup — pola yang sudah diharapkan dari dialog. */
+    root.addEventListener('pointerdown', function (ev) {
+      if (ev.target === root) paletteClose(true);
+    });
+  }
+
+  /* ==========================================================================
      17. INISIALISASI
      ======================================================================== */
 
@@ -1811,7 +2297,7 @@
     ].join(' · ');
     dom.footerIdentity.textContent = PROFILE.name + ' · ' + PROFILE.nim + ' · ' +
       PROFILE.program + ' · Semester ' + PROFILE.semester + ' · ' + PROFILE.academicYear;
-    document.title = PROFILE.name + ' · Semester ' + PROFILE.semester;
+    updateTitle();
   }
 
   function buildTabs() {
@@ -1876,6 +2362,37 @@
       dom.searchInput.select();
     });
 
+    /* Ctrl/Cmd + K — berlaku di mana pun, termasuk saat kursor ada di kotak
+       pencarian, karena ini pintasan tingkat aplikasi. */
+    document.addEventListener('keydown', function (ev) {
+      if (!(ev.ctrlKey || ev.metaKey) || ev.altKey) return;
+      if (ev.key !== 'k' && ev.key !== 'K') return;
+      ev.preventDefault();
+      if (palette.open) paletteClose(true);
+      else paletteOpen();
+    });
+
+    if (dom.paletteButton) {
+      dom.paletteButton.addEventListener('click', function () { paletteOpen(); });
+    }
+
+    /* Tombol back/forward peramban dan tautan langsung ke #mathfest */
+    window.addEventListener('hashchange', onHashChange);
+
+    /* Status sumber data juga berfungsi sebagai tombol perbarui */
+    if (dom.footerSource) {
+      dom.footerSource.addEventListener('click', function (ev) {
+        if (ev.target.closest('#sync-refresh')) refreshData();
+      });
+    }
+
+    /* Koneksi kembali tersambung — ambil data terbaru tanpa memuat ulang. */
+    window.addEventListener('online', function () {
+      renderSourceNote();
+      refreshData();
+    });
+    window.addEventListener('offline', renderSourceNote);
+
     /* Hemat sumber daya saat tab tidak terlihat — mencegah timer menumpuk */
     document.addEventListener('visibilitychange', function () {
       if (document.hidden) {
@@ -1909,12 +2426,19 @@
 
     var done = false;
 
+    /* Kunci gulir dipasang dari JS, bukan CSS. Kalau dipasang dari CSS lewat
+       .is-booting, halaman akan terkunci selamanya andaikata script.js gagal
+       dimuat dan tidak ada yang melepasnya. */
+    var previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     function dismiss() {
       if (done) return;
       done = true;
 
       intro.classList.add('is-leaving');
       root.classList.remove('is-booting');
+      document.body.style.overflow = previousOverflow;
 
       document.removeEventListener('pointerdown', dismiss);
       document.removeEventListener('keydown', dismiss);
@@ -1939,6 +2463,58 @@
     window.setTimeout(dismiss, 2600);
   }
 
+  /* --------------------------------------------------------------------------
+     PWA — pasang di layar utama, dan tetap terbuka tanpa jaringan
+     ----------------------------------------------------------------------------
+     Service worker menyimpan kerangka aplikasi (HTML, CSS, JS, font) sehingga
+     dashboard tetap terbuka di kampus tanpa sinyal. Datanya sendiri sudah punya
+     cache-nya sendiri di sheets.js.
+     ------------------------------------------------------------------------ */
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+
+    /* Service worker hanya sah di https atau localhost. Membukanya lewat
+       file:// akan melempar error yang tidak berguna bagi siapa pun. */
+    var host = window.location.hostname;
+    var secure = window.location.protocol === 'https:' || host === 'localhost' || host === '127.0.0.1';
+    if (!secure) return;
+
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('service-worker.js').catch(function (err) {
+        console.warn('Service worker tidak terdaftar:', err);
+      });
+    });
+  }
+
+  /* Tawaran pasang dibuat sunyi: tombol kecil di footer yang hanya muncul kalau
+     peramban memang menawarkannya, bukan sembulan yang menutupi halaman. */
+  var deferredInstall = null;
+
+  function setupInstallPrompt() {
+    var btn = dom.installButton;
+    if (!btn) return;
+
+    window.addEventListener('beforeinstallprompt', function (ev) {
+      ev.preventDefault();
+      deferredInstall = ev;
+      btn.hidden = false;
+    });
+
+    btn.addEventListener('click', function () {
+      if (!deferredInstall) { btn.hidden = true; return; }
+      deferredInstall.prompt();
+      deferredInstall.userChoice.then(function () {
+        deferredInstall = null;
+        btn.hidden = true;
+      });
+    });
+
+    window.addEventListener('appinstalled', function () {
+      deferredInstall = null;
+      btn.hidden = true;
+    });
+  }
+
   function init() {
     dom = {
       tabs: document.getElementById('tabs'),
@@ -1952,6 +2528,8 @@
       searchInput: document.getElementById('search-input'),
       searchClear: document.getElementById('search-clear'),
       searchKbd: document.querySelector('.search-kbd'),
+      paletteButton: document.getElementById('palette-button'),
+      installButton: document.getElementById('install-button'),
       liveRegion: document.getElementById('live-region'),
       views: {
         dashboard: document.getElementById('view-dashboard'),
@@ -1966,37 +2544,81 @@
     initTheme();
     setupIntro();
     buildTabs();
+    buildPalette();
     bindEvents();
+    setupInstallPrompt();
+    registerServiceWorker();
     showLoadingState();
 
     loadDataset(function (result) {
       DATA_SOURCE = result.source;
       DATA_NOTES = result.notes || [];
+      DATA_SAVED_AT = result.savedAt || null;
 
       hydrate(result.data);
       fillProfile();
       renderSourceNote();
+      dom.views.dashboard.removeAttribute('aria-busy');
 
       lastSignature = signature(new Date());
       var live = liveClass(new Date());
       lastLiveId = live ? live.id : null;
 
-      setView('dashboard');
+      /* Buka tampilan sesuai alamat, supaya memuat ulang dan tautan langsung
+         mendarat di tempat yang benar. fromHistory dipakai agar kunjungan
+         pertama tanpa fragmen tidak menambahkan "#dashboard" ke alamat. */
+      var route = parseHash();
+      if (route && route.view === 'search' && route.q) {
+        dom.searchInput.value = route.q;
+        searchQuery = route.q;
+        syncSearchAffordances();
+        viewBeforeSearch = 'dashboard';
+        setView('search', { fromHistory: true });
+      } else {
+        setView(route ? route.view : 'dashboard', { fromHistory: true });
+      }
+
       startTimer();
     });
   }
 
   /* Layar sementara selama data diambil. Tanpa ini, dashboard tampak kosong
      dan pengguna tidak tahu apakah aplikasinya rusak atau sedang memuat. */
+  function skeleton(cls) {
+    return '<span class="sk ' + cls + '"></span>';
+  }
+
   function showLoadingState() {
     var view = dom.views.dashboard;
     if (!view) return;
+
+    /* Kerangka mengikuti bentuk dashboard yang sebenarnya, sehingga tidak ada
+       lompatan tata letak ketika data datang. aria-busy + teks di live region
+       yang menyampaikan keadaannya; kerangkanya sendiri murni visual. */
+    view.setAttribute('aria-busy', 'true');
     view.innerHTML =
       '<header class="greeting"><h1>Menyiapkan dashboard</h1>' +
       '<p class="greeting-meta"><span>Mengambil jadwal dan agenda terbaru…</span></p></header>' +
-      '<div class="card card-pad"><p class="semester-note">' + icon('clock') +
-      '<span>Kalau data online tidak terjangkau, dashboard otomatis memakai ' +
-      'data yang tersimpan di <code>data.js</code>.</span></p></div>';
+      '<div class="dash-grid" aria-hidden="true">' +
+      '<div class="dash-col">' +
+      '<div class="card card-pad sk-block">' +
+      skeleton('sk-label') + skeleton('sk-title') + skeleton('sk-line') +
+      skeleton('sk-big') + skeleton('sk-line sk-w60') +
+      '</div>' +
+      '<div class="card card-pad sk-block">' +
+      skeleton('sk-label') + skeleton('sk-row') + skeleton('sk-row') + skeleton('sk-row') +
+      '</div>' +
+      '</div>' +
+      '<div class="dash-col">' +
+      '<div class="card card-pad sk-block">' +
+      skeleton('sk-label') + skeleton('sk-row') + skeleton('sk-line sk-w60') +
+      '</div>' +
+      '<div class="card card-pad sk-block">' +
+      skeleton('sk-label') + skeleton('sk-row') + skeleton('sk-row') +
+      '</div>' +
+      '</div></div>';
+
+    if (dom.liveRegion) dom.liveRegion.textContent = 'Memuat data akademik.';
   }
 
   /* Pembungkus tipis di atas sheets.js. Kalau berkas itu tidak dimuat sekalipun,
@@ -2045,22 +2667,129 @@
     }
   }
 
+  /* --------------------------------------------------------------------------
+     STATUS SUMBER DATA
+     ----------------------------------------------------------------------------
+     Aturannya satu: jangan pernah menulis sesuatu yang lebih meyakinkan daripada
+     keadaan sebenarnya. Kalau yang tampil adalah salinan berumur dua jam, itu
+     yang ditulis — bukan "tersinkron".
+     ------------------------------------------------------------------------ */
+  function isOffline() {
+    try { return navigator && navigator.onLine === false; } catch (e) { return false; }
+  }
+
+  function relativeTime(ts, now) {
+    var mins = Math.round(Math.max(0, now - ts) / 60000);
+    if (mins < 1) return 'baru saja';
+    if (mins < 60) return mins + ' menit lalu';
+    var hours = Math.round(mins / 60);
+    if (hours < 24) return hours + ' jam lalu';
+    var days = Math.round(hours / 24);
+    if (days === 1) return 'kemarin';
+    if (days < 30) return days + ' hari lalu';
+    return 'lebih dari sebulan lalu';
+  }
+
+  function clockLabel(ts) {
+    var d = new Date(ts);
+    return pad(d.getHours()) + '.' + pad(d.getMinutes());
+  }
+
+  function sourceStatus() {
+    var now = Date.now();
+
+    if (isOffline()) {
+      return DATA_SAVED_AT
+        ? { state: 'offline', text: 'Offline · data tersimpan ' + relativeTime(DATA_SAVED_AT, now) }
+        : { state: 'offline', text: 'Offline · menampilkan data bawaan' };
+    }
+
+    if (DATA_SOURCE === 'sheets') {
+      return { state: 'live', text: 'Tersinkron' + (DATA_SAVED_AT ? ' ' + clockLabel(DATA_SAVED_AT) : '') };
+    }
+    if (DATA_SOURCE === 'campuran') {
+      return {
+        state: 'partial',
+        text: 'Sebagian tersinkron' + (DATA_SAVED_AT ? ' ' + clockLabel(DATA_SAVED_AT) : '')
+      };
+    }
+    if (DATA_SOURCE === 'cache') {
+      return {
+        state: 'stale',
+        text: 'Gagal menyambung · data tersimpan ' +
+          (DATA_SAVED_AT ? relativeTime(DATA_SAVED_AT, now) : 'dari sesi sebelumnya')
+      };
+    }
+    return { state: 'local', text: 'Data akademik dikelola di data.js' };
+  }
+
   function renderSourceNote() {
     if (!dom.footerSource) return;
 
-    var labels = {
-      sheets: 'Data langsung dari Google Sheets',
-      campuran: 'Sebagian data dari Google Sheets, sisanya dari data.js',
-      lokal: 'Data akademik dikelola di data.js'
-    };
-    var text = labels[DATA_SOURCE] || labels.lokal;
+    var status = sourceStatus();
+    var configured = false;
+    try {
+      configured = !!(window.AcademicDataSource && window.AcademicDataSource.isConfigured());
+    } catch (e) { configured = false; }
 
-    if (DATA_NOTES.length) {
-      text += ' · ada catatan, lihat konsol';
-      DATA_NOTES.forEach(function (note) { console.warn('[sumber data]', note); });
+    var detail = DATA_NOTES.length
+      ? DATA_NOTES.length + ' catatan teknis tercatat di konsol peramban.'
+      : '';
+
+    /* Tombol hanya dipasang kalau ada yang benar-benar bisa disegarkan.
+       Tombol yang tidak melakukan apa-apa lebih buruk daripada tidak ada. */
+    var inner =
+      '<span class="sync-dot" aria-hidden="true"></span>' +
+      '<span class="sync-text">' + esc(status.text) + '</span>';
+
+    if (configured) {
+      dom.footerSource.innerHTML =
+        '<button type="button" class="sync-status" id="sync-refresh" data-state="' + status.state + '"' +
+        ' aria-label="' + esc(status.text) + '. Perbarui data sekarang."' +
+        (detail ? ' title="' + esc(detail) + '"' : '') + '>' +
+        inner + icon('clock', 'sync-icon') + '</button>';
+    } else {
+      dom.footerSource.innerHTML =
+        '<span class="sync-status" data-state="' + status.state + '"' +
+        (detail ? ' title="' + esc(detail) + '"' : '') + '>' + inner + '</span>';
     }
 
-    dom.footerSource.textContent = text;
+    DATA_NOTES.forEach(function (note) { console.warn('[sumber data]', note); });
+  }
+
+  /* Mengambil ulang data tanpa memuat ulang halaman. Dipakai oleh tombol status
+     dan saat koneksi kembali tersambung. */
+  var refreshing = false;
+
+  function refreshData() {
+    if (refreshing) return;
+    refreshing = true;
+
+    if (dom.footerSource) {
+      var btn = dom.footerSource.querySelector('.sync-status');
+      if (btn) btn.setAttribute('data-state', 'syncing');
+      var label = dom.footerSource.querySelector('.sync-text');
+      if (label) label.textContent = 'Menyinkronkan…';
+    }
+
+    loadDataset(function (result) {
+      refreshing = false;
+      DATA_SOURCE = result.source;
+      DATA_NOTES = result.notes || [];
+      DATA_SAVED_AT = result.savedAt || null;
+
+      hydrate(result.data);
+      fillProfile();
+      renderSourceNote();
+
+      /* Paksa mesin realtime menggambar ulang dengan data baru. */
+      lastSignature = '';
+      tick();
+
+      if (dom.liveRegion) {
+        dom.liveRegion.textContent = sourceStatus().text + '.';
+      }
+    });
   }
 
   if (document.readyState === 'loading') {

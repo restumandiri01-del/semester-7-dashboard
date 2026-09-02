@@ -3,11 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="Dashboard akademik pribadi Semester 7 — jadwal kuliah, beban SKS, aktivitas akademik, dan bimbingan dalam satu tempat.">
+  <meta name="description" content="Dashboard akademik pribadi Semester 7 — jadwal kuliah, beban SKS, aktivitas akademik, bimbingan, dan timeline kepanitiaan dalam satu tempat.">
   <meta name="color-scheme" content="light dark">
-  <meta name="theme-color" content="#F7F6F3" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#0E1413" media="(prefers-color-scheme: dark)">
+
+  <!-- Satu meta theme-color saja, dan nilainya diikuti JS ketika tema diganti
+       manual. Dua meta berbasis prefers-color-scheme dulu membuat bilah peramban
+       tetap terang saat pengguna memilih tema gelap sendiri. -->
+  <meta name="theme-color" id="theme-color" content="#f7f6f3">
+
   <title>Semester 7 · Restu Mandiri</title>
+
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-title" content="Semester 7">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+
+  <!-- Ini catatan akademik pribadi, bukan halaman yang ingin ditemukan mesin
+       pencari. Metadata SEO dan Open Graph sengaja tidak ditambahkan. -->
+  <meta name="robots" content="noindex">
 
   <!-- Terapkan tema sebelum paint pertama agar tidak ada kedipan warna.
        Sekaligus tandai bahwa JS aktif, supaya layar pembuka hanya muncul kalau
@@ -19,7 +34,9 @@
         var stored = localStorage.getItem('s7os.theme');
         var theme = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         document.documentElement.setAttribute('data-theme', theme);
-      } catch (e) { /* localStorage tidak tersedia — pakai default light */ }
+        var meta = document.getElementById('theme-color');
+        if (meta) meta.setAttribute('content', theme === 'dark' ? '#0e1413' : '#f7f6f3');
+      } catch (e) { /* localStorage tidak tersedia - pakai default light */ }
 
       try {
         var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -42,7 +59,8 @@
 <body>
   <!-- Layar pembuka. Dekoratif sepenuhnya: aria-hidden supaya pembaca layar
        langsung membaca konten asli, dan bisa dilewati dengan klik atau tombol
-       apa pun. -->
+       apa pun. CSS-nya juga menutup layar ini sendiri setelah 3,2 detik, jadi
+       halaman tetap terbuka walaupun script.js gagal dimuat sama sekali. -->
   <div class="intro" id="intro" aria-hidden="true">
     <div class="intro-inner">
       <p class="intro-kicker">Academic OS</p>
@@ -76,7 +94,7 @@
             spellcheck="false"
             placeholder="Cari mata kuliah, dosen, ruangan…"
             aria-describedby="search-hint">
-          <span class="sr-only" id="search-hint">Tekan garis miring untuk fokus ke pencarian, Escape untuk menutup.</span>
+          <span class="sr-only" id="search-hint">Tekan garis miring untuk fokus ke pencarian, Escape untuk menutup. Tekan Control atau Command tambah K untuk membuka perintah cepat.</span>
           <kbd class="search-kbd" aria-hidden="true">/</kbd>
           <button type="button" class="search-clear" id="search-clear" hidden aria-label="Bersihkan pencarian">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
@@ -84,6 +102,15 @@
             </svg>
           </button>
         </search>
+
+        <!-- Ctrl/Cmd+K tidak berarti apa-apa di layar sentuh, jadi perintah
+             cepat juga punya tombolnya sendiri. -->
+        <button type="button" class="icon-button" id="palette-button" aria-label="Buka perintah cepat">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3.6" y="4.6" width="16.8" height="14.8" rx="2.6"></rect>
+            <path d="m8.4 10.2 2.4 2.2-2.4 2.2M12.8 14.8h3"></path>
+          </svg>
+        </button>
 
         <button type="button" class="icon-button" id="theme-toggle" aria-label="Ganti tema">
           <svg class="icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -102,19 +129,32 @@
     </div>
   </header>
 
+  <noscript>
+    <div class="shell noscript-note">
+      <p><strong>JavaScript sedang tidak aktif.</strong></p>
+      <p>Jadwal, hitung mundur, dan peringatan bentrok di halaman ini dihitung
+        langsung di peramban, jadi datanya tidak bisa ditampilkan tanpa
+        JavaScript. Aktifkan JavaScript lalu muat ulang halaman.</p>
+    </div>
+  </noscript>
+
   <main class="shell" id="main" tabindex="-1">
-    <div class="view" id="view-dashboard" data-view="dashboard" aria-label="Dashboard"></div>
-    <div class="view" id="view-jadwal" data-view="jadwal" aria-label="Jadwal" hidden></div>
-    <div class="view" id="view-aktivitas" data-view="aktivitas" aria-label="Aktivitas akademik" hidden></div>
-    <div class="view" id="view-bimbingan" data-view="bimbingan" aria-label="Bimbingan akademik" hidden></div>
-    <div class="view" id="view-mathfest" data-view="mathfest" aria-label="Timeline kepanitiaan Mathfest" hidden></div>
-    <div class="view" id="view-search" data-view="search" aria-label="Hasil pencarian" hidden></div>
+    <div class="view" id="view-dashboard" data-view="dashboard" role="region" aria-label="Dashboard"></div>
+    <div class="view" id="view-jadwal" data-view="jadwal" role="region" aria-label="Jadwal" hidden></div>
+    <div class="view" id="view-aktivitas" data-view="aktivitas" role="region" aria-label="Aktivitas akademik" hidden></div>
+    <div class="view" id="view-bimbingan" data-view="bimbingan" role="region" aria-label="Bimbingan akademik" hidden></div>
+    <div class="view" id="view-mathfest" data-view="mathfest" role="region" aria-label="Timeline kepanitiaan Mathfest" hidden></div>
+    <div class="view" id="view-search" data-view="search" role="region" aria-label="Hasil pencarian" hidden></div>
   </main>
 
   <footer class="app-footer">
     <div class="shell footer-inner">
       <span id="footer-identity"></span>
-      <span class="footer-note" id="footer-source">Menyiapkan data…</span>
+      <span class="footer-tools">
+        <!-- Muncul hanya kalau peramban benar-benar menawarkan pemasangan. -->
+        <button type="button" class="install-button" id="install-button" hidden>Pasang aplikasi</button>
+        <span class="footer-note" id="footer-source">Menyiapkan data…</span>
+      </span>
     </div>
   </footer>
 

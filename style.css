@@ -239,12 +239,22 @@ code {
    2b. LAYAR PEMBUKA
    ----------------------------------------------------------------------------
    Hanya tampil kalau <html> punya kelas .is-booting, yang dipasang oleh skrip
-   inline di index.html. Artinya: tanpa JS layar ini tidak pernah muncul, jadi
-   mustahil membuat halaman tersangkut.
+   inline di index.html. Artinya: tanpa JS layar ini tidak pernah muncul.
+
+   Ada satu kemungkinan kegagalan lagi yang harus ditutup: skrip inline berhasil
+   memasang .is-booting, tetapi script.js gagal dimuat sehingga tidak ada yang
+   melepasnya. Dulu itu berarti halaman tertutup selamanya. Sekarang CSS-nya
+   sendiri yang membuka: animasi failsafe menutup layar pembuka dan menampilkan
+   konten setelah 3,2 detik, tanpa bergantung pada JavaScript sama sekali.
+   Jalur normalnya tetap lebih cepat (sekitar 1 detik, ditutup oleh JS).
    ------------------------------------------------------------------------- */
 .intro { display: none; }
 
-html.is-booting .intro {
+/* .is-leaving ikut mempertahankan tata letaknya. Tanpa ini, melepas .is-booting
+   langsung mengembalikan display:none dan animasi keluarnya tidak pernah
+   terlihat — layar pembuka hilang dengan menghentak, bukan memudar. */
+html.is-booting .intro,
+.intro.is-leaving {
   position: fixed;
   inset: 0;
   z-index: 200;
@@ -252,16 +262,31 @@ html.is-booting .intro {
   place-items: center;
   background: var(--background);
 }
-html.is-booting body { overflow: hidden; }
+
+html.is-booting .intro {
+  animation: intro-failsafe 0.5s var(--ease-out) 3.2s both;
+}
 
 /* Konten aplikasi ikut naik lembut begitu layar pembuka pergi */
 html.is-booting .app-header,
 html.is-booting main,
-html.is-booting .app-footer { opacity: 0; }
+html.is-booting .app-footer {
+  opacity: 0;
+  animation: boot-failsafe 0.5s var(--ease-out) 3.2s both;
+}
 
 .app-header, main, .app-footer {
   opacity: 1;
   transition: opacity 0.5s var(--ease-out);
+}
+
+@keyframes intro-failsafe {
+  from { opacity: 1; visibility: visible; }
+  to { opacity: 0; visibility: hidden; }
+}
+@keyframes boot-failsafe {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .intro.is-leaving {
@@ -269,6 +294,7 @@ html.is-booting .app-footer { opacity: 0; }
   transform: scale(1.03);
   transition: opacity 0.55s var(--ease-out), transform 0.55s var(--ease-out);
   pointer-events: none;
+  animation: none;   /* failsafe tidak perlu lagi — JS sudah mengambil alih */
 }
 
 .intro-inner { text-align: center; padding-inline: var(--space-6); }
@@ -807,6 +833,57 @@ main:focus { outline: none; }
 .empty-state.is-compact .icon { width: 20px; height: 20px; }
 .empty-state.is-compact .empty-state-title { font-size: 0.8125rem; }
 .empty-state.is-compact .empty-state-text { font-size: 0.75rem; }
+
+/* --- Catatan tanpa JavaScript ------------------------------------------- */
+.noscript-note {
+  margin-block: var(--space-8);
+  padding: var(--space-5);
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--highlight);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+.noscript-note p + p { margin-top: var(--space-2); color: var(--text-muted); }
+
+/* --- Bagian yang gagal dirender ------------------------------------------ */
+.section-error { border-left: 3px solid var(--danger); }
+
+/* --- Skeleton -------------------------------------------------------------
+   Bentuknya mengikuti tata letak yang akan menggantikannya, sehingga tidak ada
+   pergeseran tata letak saat data datang. Murni dekoratif: pembaca layar
+   mendapat kabarnya dari live region, bukan dari kotak-kotak ini.
+   ------------------------------------------------------------------------- */
+.sk-block > .sk + .sk { margin-top: var(--space-3); }
+
+.sk {
+  display: block;
+  border-radius: var(--r-sm);
+  background: linear-gradient(
+    90deg,
+    var(--surface-secondary) 0%,
+    var(--surface-hover) 50%,
+    var(--surface-secondary) 100%);
+  background-size: 220% 100%;
+  animation: sk-shimmer 1.5s ease-in-out infinite;
+}
+.sk-label { width: 96px; height: 10px; border-radius: var(--r-full); }
+.sk-title { width: 62%; height: 22px; }
+.sk-line { width: 88%; height: 12px; }
+.sk-w60 { width: 46%; }
+.sk-big { width: 54%; height: 40px; }
+.sk-row { width: 100%; height: 44px; border-radius: var(--r-md); }
+
+@keyframes sk-shimmer {
+  from { background-position: 140% 0; }
+  to { background-position: -40% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sk { animation: none; background: var(--surface-secondary); }
+}
 
 /* ---------------------------------------------------------------------------
    6. DASHBOARD
@@ -1383,6 +1460,27 @@ main:focus { outline: none; }
 .class-card .cc-facts .icon { width: 13px; height: 13px; color: var(--text-subtle); }
 .class-card .cc-foot { display: flex; }
 
+/* --- Slot formalitas KRS --------------------------------------------------
+   Slot yang tertulis di KRS tetapi tidak benar-benar berjalan. Dibedakan dengan
+   garis putus-putus, bukan dengan warna saja, supaya tetap terbaca oleh siapa
+   pun yang tidak dapat membedakan warna.
+   ------------------------------------------------------------------------- */
+.class-card[data-state="formality"] {
+  border-style: dashed;
+  /* --border-strong hanya mencapai 1,47:1 di atas surface-secondary. Karena
+     garis ini ikut menyampaikan arti, dipakai --border-control yang memenuhi
+     3:1 (WCAG 1.4.11). Artinya tetap tidak bergantung pada garis saja: ada
+     lencana "Formalitas KRS" dan catatan teksnya. */
+  border-color: var(--border-control);
+  background: var(--surface-secondary);
+}
+.cc-note {
+  margin-top: var(--space-3);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
 /* ---------------------------------------------------------------------------
    8. AKTIVITAS & BIMBINGAN
    ------------------------------------------------------------------------- */
@@ -1735,6 +1833,179 @@ main:focus { outline: none; }
 }
 
 /* ---------------------------------------------------------------------------
+   9c. COMMAND PALETTE
+   ----------------------------------------------------------------------------
+   Dialog tunggal, dibangun dari elemen native. Hanya satu elemen di dalamnya
+   yang bisa difokus (input), sehingga penguncian fokusnya sederhana dan tidak
+   membutuhkan penelusuran elemen fokusabel.
+   ------------------------------------------------------------------------- */
+html.has-palette { overflow: hidden; }
+
+/* Terlihat mubazir, tetapi wajib ada: `display: flex` pada selektor kelas di
+   bawah mengalahkan `[hidden] { display: none }` bawaan peramban, sehingga
+   tanpa baris ini dialognya tidak pernah benar-benar tersembunyi. */
+.palette-backdrop[hidden] { display: none; }
+
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: max(10vh, var(--space-8)) var(--space-4) var(--space-8);
+  background: rgba(26, 28, 27, 0.42);
+  animation: palette-fade 0.18s var(--ease-out) both;
+}
+[data-theme="dark"] .palette-backdrop { background: rgba(0, 0, 0, 0.6); }
+
+@supports (backdrop-filter: blur(4px)) {
+  .palette-backdrop { backdrop-filter: blur(3px); }
+}
+
+.palette {
+  width: min(560px, 100%);
+  max-height: min(70vh, 560px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Garis tipis ini dekoratif. Batas panel sudah terbaca jelas dari latar yang
+     digelapkan dan bayangannya, jadi 1.4.11 terpenuhi tanpa memaksa garis 3:1
+     yang akan terlihat berat pada dialog. */
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  animation: palette-rise 0.22s var(--ease-out) both;
+}
+
+.palette-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+.palette-field > .icon { flex: none; color: var(--text-subtle); }
+
+#palette-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.4;
+}
+#palette-input::placeholder { color: var(--text-subtle); }
+#palette-input:focus { outline: none; }   /* cincin fokus ada di panelnya */
+
+.palette:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.palette-kbd {
+  flex: none;
+  padding: 3px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-secondary);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1;
+}
+
+.palette-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2);
+  list-style: none;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  /* 44px penuh: cukup untuk jari, dan tetap padat untuk daftar panjang. */
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r-md);
+  border-left: 3px solid transparent;
+  color: var(--text);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.palette-item > .icon { flex: none; color: var(--text-subtle); }
+
+.palette-item[aria-selected="true"] {
+  border-left-color: var(--primary);
+  background: var(--surface-hover);
+}
+.palette-item[aria-selected="true"] > .icon { color: var(--primary); }
+
+.palette-item-title {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.palette-item-hint {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.palette-empty {
+  padding: var(--space-5) var(--space-3);
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.palette-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--border);
+  background: var(--surface-secondary);
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+}
+.palette-foot kbd {
+  display: inline-block;
+  min-width: 18px;
+  margin-right: 3px;
+  padding: 2px 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  line-height: 1.2;
+  text-align: center;
+}
+
+@keyframes palette-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes palette-rise {
+  from { opacity: 0; transform: translateY(-10px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 640px) {
+  .palette-backdrop { padding-top: var(--space-6); }
+  .palette-foot { display: none; }   /* tidak ada papan ketik untuk ditunjukkan */
+}
+
+/* ---------------------------------------------------------------------------
    10. FOOTER
    ------------------------------------------------------------------------- */
 .app-footer {
@@ -1752,6 +2023,90 @@ main:focus { outline: none; }
   color: var(--text-subtle);
 }
 .footer-note { color: var(--text-subtle); }
+
+.footer-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* --- Status sinkronisasi --------------------------------------------------
+   Titik warna selalu ditemani teks. Warna sendirian tidak pernah menjadi
+   satu-satunya pembawa arti.
+   ------------------------------------------------------------------------- */
+.sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--r-full);
+  background: none;
+  color: var(--text-subtle);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+button.sync-status {
+  border-color: var(--border);
+  cursor: pointer;
+  transition: border-color 0.18s var(--ease-out), background 0.18s var(--ease-out);
+}
+button.sync-status:hover {
+  border-color: var(--border-control);
+  background: var(--surface-secondary);
+}
+
+.sync-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-full);
+  background: var(--text-subtle);
+}
+.sync-icon { width: 14px; height: 14px; opacity: 0.65; }
+
+.sync-status[data-state="live"] { color: var(--success); }
+.sync-status[data-state="live"] .sync-dot { background: var(--success); }
+
+.sync-status[data-state="partial"],
+.sync-status[data-state="stale"],
+.sync-status[data-state="offline"] { color: var(--warning); }
+.sync-status[data-state="partial"] .sync-dot,
+.sync-status[data-state="stale"] .sync-dot,
+.sync-status[data-state="offline"] .sync-dot { background: var(--warning); }
+
+.sync-status[data-state="syncing"] .sync-dot {
+  background: var(--primary);
+  animation: sync-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes sync-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+/* --- Tawaran pasang aplikasi --------------------------------------------- */
+.install-button {
+  min-height: 32px;
+  padding: 5px 12px;
+  border: 1px solid var(--border-control);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.18s var(--ease-out), border-color 0.18s var(--ease-out);
+}
+.install-button:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}
 
 /* ---------------------------------------------------------------------------
    11. RESPONSIVE
