@@ -2,7 +2,11 @@
 
 Dashboard akademik pribadi untuk Restu Mandiri (1237010016 · Matematika · Semester 7 · 2026/2027).
 
-HTML + CSS + JavaScript murni. Tanpa build step, tanpa dependensi, tanpa koneksi internet.
+HTML + CSS + JavaScript murni. Tanpa build step, tanpa bundler, tanpa framework.
+
+Satu-satunya sumber daya eksternal adalah font Plus Jakarta Sans dari Google
+Fonts. Tanpa koneksi internet aplikasi tetap berjalan penuh — font otomatis
+turun ke stack sistem yang sudah disiapkan di `style.css`.
 
 ## Menjalankan
 
@@ -220,9 +224,33 @@ Tiap agenda:
 | `Esc` | Bersihkan pencarian dan kembali ke tampilan sebelumnya |
 | `Tab` | Navigasi keyboard penuh dengan focus ring yang terlihat |
 
+## Design system — "Kertas & Tinta"
+
+Seluruh tampilan memakai satu sistem yang didefinisikan sebagai design token di
+bagian atas `style.css`. Untuk mengganti nuansa aplikasi, ubah token-nya saja —
+jangan warna per komponen.
+
+| Aspek | Pilihan | Alasan |
+| --- | --- | --- |
+| Gaya | Flat + elevasi seperlunya | Ringan dan cepat, tetapi kartu tetap terbaca sebagai lapisan |
+| Latar | Kertas hangat `#F7F6F3` | Menghindari kesan sistem kampus yang dingin dan birokratis |
+| Aksi | Tinta teal `#0F766E` | Tenang dan fokus, cocok untuk alat belajar |
+| Sorotan | Stabilo oranye `#C2410C` | Dipakai hemat, hanya untuk hal mendesak dan penanda hari ini |
+| Font | Plus Jakarta Sans | Ramah tapi profesional; angka memakai mono sistem agar mudah dipindai |
+| Spasi | Kelipatan 4 (`--space-1` … `--space-12`) | Ritme vertikal konsisten di semua tampilan |
+| Motion | 140–220ms | Cukup terasa, tidak memperlambat |
+
+Mode terang dan gelap didefinisikan terpisah — bukan sekadar warna dibalik.
+Bayangan, warna aksen, dan warna status masing-masing disetel ulang di
+`[data-theme="dark"]`.
+
 ## Catatan teknis
 
 - Tema mengikuti preferensi sistem sampai kamu memilih sendiri; pilihan disimpan di `localStorage`.
 - Satu `setInterval` untuk seluruh aplikasi, otomatis berhenti saat tab tidak terlihat.
 - Render ulang hanya terjadi saat status jadwal berubah, bukan tiap detik.
-- Semua warna teks memenuhi kontras WCAG AA pada mode terang maupun gelap.
+- Seluruh pasangan warna teks diverifikasi >= 4.5:1 (WCAG AA) dan batas kontrol
+  form >= 3:1 (WCAG 1.4.11), pada mode terang maupun gelap.
+- Tidak ada scroll horizontal sampai lebar 320px; `.tabs` dan `.chip-group`
+  memang dapat digeser ke samping, dan itu disengaja.
+- `prefers-reduced-motion` dihormati: seluruh animasi dan transform dimatikan.

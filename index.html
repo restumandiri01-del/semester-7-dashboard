@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Dashboard akademik pribadi Semester 7 — jadwal kuliah, beban SKS, aktivitas akademik, dan bimbingan dalam satu tempat.">
   <meta name="color-scheme" content="light dark">
-  <meta name="theme-color" content="#F7F7F5" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#0B0B0C" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#F7F6F3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0E1413" media="(prefers-color-scheme: dark)">
   <title>Semester 7 · Restu Mandiri</title>
 
   <!-- Terapkan tema sebelum paint pertama agar tidak ada kedipan warna. -->
@@ -19,6 +19,13 @@
       } catch (e) { /* localStorage tidak tersedia — pakai default light */ }
     })();
   </script>
+
+  <!-- Plus Jakarta Sans. Kalau tidak ada koneksi, font fallback sistem di
+       style.css langsung dipakai — aplikasi tetap tampil normal. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
 
   <link rel="stylesheet" href="style.css">
 </head>
